@@ -18,7 +18,6 @@ func main() {
 
 	// create server with db
 	server := app.NewServer(database)
-	
 		addr := ":8080"
 	
 

@@ -15,3 +15,8 @@ type User struct {
 	IsPrivate    bool       `db:"is_private"`
 	CreatedAt    time.Time  `db:"created_at"`
 }
+
+//messages
+
+//posts
+
