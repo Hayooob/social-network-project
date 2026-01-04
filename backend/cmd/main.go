@@ -20,7 +20,6 @@ func main() {
 	server := app.NewServer(database)
 		addr := ":8080"
 	
-
 	log.Println("Starting server on", addr)
 
 	// start the HTTP server

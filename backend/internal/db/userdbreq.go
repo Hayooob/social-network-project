@@ -91,3 +91,50 @@ func GetUserByEmail(db *sql.DB, email string) (*models.User, error) {
 	u.IsPrivate = isPrivateInt == 1
 	return &u, nil
 }
+
+func GetUserByID(db *sql.DB, id int64) (*models.User, error) {
+	stmt := `
+		SELECT
+			id,
+			uuid,
+			email,
+			password_hash,
+			full_name,
+			date_of_birth,
+			avatar_url,
+			nickname,
+			about_me,
+			is_private,
+			created_at
+		FROM users
+		WHERE id = ?
+	`
+
+	row := db.QueryRow(stmt, id)
+
+	var u models.User
+	var isPrivateInt int
+
+	err := row.Scan(
+		&u.ID,
+		&u.UUID,
+		&u.Email,
+		&u.PasswordHash,
+		&u.FullName,
+		&u.DateOfBirth,
+		&u.AvatarURL,
+		&u.Nickname,
+		&u.AboutMe,
+		&isPrivateInt,
+		&u.CreatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	u.IsPrivate = isPrivateInt == 1
+	return &u, nil
+}

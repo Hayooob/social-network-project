@@ -29,12 +29,45 @@ func NewServer(db *sql.DB) *Server {
 		w.Write([]byte(`{"status":"ok"}`))
 	})
 
-	// need to add more pages : mux.HandleFunc("/register", s.handleRegister) & login etc
+mux.HandleFunc("/api/register", s.handleRegister)
+	mux.HandleFunc("/api/login", s.handleLogin)
+	mux.HandleFunc("/api/logout", s.handleLogout)
+	mux.HandleFunc("/api/me", s.handleMe)
+	// add posts, profiles, feed, bla bla
 
 	return s
 }
 //starting the server
 func (s *Server) Listen(addr string) error {
 	log.Println("Starting server on", addr)
-	return http.ListenAndServe(addr, s.Mux)
+
+	// First apply auth then wrap everything in CORS
+	handler := s.CORSMiddleware(s.AuthMiddleware(s.Mux))
+
+	return http.ListenAndServe(addr, handler)
+}
+
+
+// CORSMiddleware adds CORS headers so the React dev server (localhost:5173) can talk to the Go API on localhost:8080 using cookies (added this when test failed)
+func (s *Server) CORSMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+
+		// Only allow your frontend origin during dev
+		if origin == "http://localhost:5173" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		}
+
+		// Handle preflight requests directly
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		// For normal requests, continue down the chain
+		next.ServeHTTP(w, r)
+	})
 }

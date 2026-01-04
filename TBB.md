@@ -1,43 +1,32 @@
-TO BE BUILT:
+Stage 3 – Basic posts, feed, and profile posts
 
-- project skeleton + FS (done)
+Backend:
 
-FRONTEND
-- /api:
-    - auth.js file (create a function to call go api with fetch):
-        - login(email, password)
-        - register(formData)
-        - getCurrentUser()
+- internal/models/posts.go 
+Define the Post struct that matches the posts table (also make the posts table in migrations folder if not done)
 
-- /pages:
-    - Loginpage (call auth.js)
-    - Resgisterpage
-    - Feedpage
-    - Profilepage
-    - Groupspage
-    - Chatpage
+- internal/db/postdb.go 
+write helper functions to insert a new post, list recent posts for the global feed, and list posts by a specific user id ordered by newest first
 
-- /components:
-    - Navbar (on every page)
-    - Post Detail (how a single post looks like)
-    - Profile Card (how profile info looks like)
-    - Chat Window (messages plus input area)
+- internal/app/handlers.go 
+Add handlers for POST /api/posts to create a new post for the logged in user, GET /api/feed to return the public feed, and GET /api/me/posts to return posts by the current user
 
-BACKEND
-- /cmd/server -> main.go (open db, create server & listen) (DONE)
+- internal/app/server.go 
+Register the new post routes on the mux so the frontend can call /api/posts, /api/feed, and /api/me/posts next to the existing routes
 
-- /internal/db: (for DB connection + queries)
-    - sessions.go -> create, delete & getuserby session funcs.
-    - db.go -> open db & run migrations. (DONE)
-    - userdbreq.go -> create user and getuserbyemail type querries. (DONE)
-    - /migrations -> (create table sql querries) (create session tables etc) (DONE for users)
+Frontend:
 
-- /internal/app:
-    - server.go -> defines server, routes, mux (handle auth routes to mux (mux.handlefunc(/register,...))) (DONE)
-    - handlers.go -> handle register(post), login(post), logout(post), currentuser(get) 
-    - middleware.go -> file to read cookie load user from session...
+- src/api/posts.js 
+Wrap the post endpoints with small helpers like getFeed, createPost, and getMyPosts, all using the existing ftchclient 
 
+- src/components/PostForm.jsx 
+a form with a textarea and submit button that lets a logged in user create a new post and then refreshes the feed.
 
-- /internal/models: (Define all relavent structs)
-    - users.go -> define user struct (DONE)
-    - session, post group msgs etc... 
+- src/components/PostCard.jsx 
+create a single post card with the author name, timestamp, and content 
+
+- src/pages/FeedPage.jsx 
+change it so it now calls getFeed on mount instead of the filler txt. (shows a list of PostCard components & include PostForm at the top so users can add new posts directly from the feedpage)
+
+- src/pages/ProfilePage.jsx 
+it should useAuth to show the current users basic info & calls getMyPosts
