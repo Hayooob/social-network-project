@@ -55,7 +55,7 @@ Simple placeholder page used to confirm that routing works after login.
 - src/pages/ProfilePage.jsx 
 Placeholder profile page that will later display the logged in users information.
 
-**Stage 2 – Real auth, sessions, and protected pages
+**Stage 2 – Real auth, sessions, and protected pages (DONE)
 
 Backend:
 
