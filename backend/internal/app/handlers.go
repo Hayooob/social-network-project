@@ -3,6 +3,8 @@ package app
 import (
 	"encoding/json"
 	"net/http"
+	"social-network/internal/db"
+	"log"
 )
 
 //helpers:
@@ -75,7 +77,6 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusCreated, resp)
 }
-
 
 // login:
 
@@ -183,4 +184,110 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// POST HANDLERS
+
+// CreatePost handles POST /api/posts - creates a new post for the logged-in user
+func (s *Server) CreatePost(w http.ResponseWriter, r *http.Request) {
+	log.Println("=== CreatePost called ===")
+	log.Println("Method:", r.Method)
+	
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	// Get current user from context (set by AuthMiddleware)
+	user := CurrentUser(r.Context())
+	log.Println("Current user:", user)
+	if user == nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+		
+	// Parse request body
+	var req struct {
+		Content string `json:"content"`
+		Privacy string `json:"privacy"`
+	}
+	
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	
+	// Validate content
+	if req.Content == "" {
+		writeError(w, http.StatusBadRequest, "content cannot be empty")
+		return
+	}
+	
+	// Default privacy to public if not specified
+	if req.Privacy == "" {
+		req.Privacy = "public"
+	}
+	
+	// Validate privacy value
+	if req.Privacy != "public" && req.Privacy != "private" && req.Privacy != "almost-private" {
+		writeError(w, http.StatusBadRequest, "invalid privacy setting")
+		return
+	}
+	
+	// Create the post
+	post, err := db.InsertPost(s.DB, int(user.ID), req.Content, req.Privacy)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create post")
+		return
+	}
+	
+	writeJSON(w, http.StatusCreated, post)
+}
+
+// GetFeed handles GET /api/feed - returns the public feed
+func (s *Server) GetFeed(w http.ResponseWriter, r *http.Request) {
+	log.Println("=== GetFeed called ===")
+	log.Println("Method:", r.Method)
+	log.Println("DB is nil?", s.DB == nil)
+	
+	if r.Method != http.MethodGet {
+		log.Println("Method not allowed")
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	// Get recent public posts (limit to 50)
+	log.Println("Calling GetPublicFeed...")
+	posts, err := db.GetPublicFeed(s.DB, 50)
+	if err != nil {
+		log.Println("GetPublicFeed ERROR:", err)
+		writeError(w, http.StatusInternalServerError, "failed to fetch feed")
+		return
+	}
+	
+	log.Println("Found", len(posts), "posts")
+	writeJSON(w, http.StatusOK, posts)
+}
+// GetMyPosts handles GET /api/me/posts - returns posts by the current user
+func (s *Server) GetMyPosts(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	// Get current user from context
+	user := CurrentUser(r.Context())
+	if user == nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	
+	// Fetch user's posts
+	posts, err := db.GetPostsByUserID(s.DB, int(user.ID))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to fetch posts")
+		return
+	}
+	
+	writeJSON(w, http.StatusOK, posts)
 }

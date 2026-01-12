@@ -7,9 +7,8 @@ import (
 )
 
 type Server struct {
-	
-		DB  *sql.DB
-		// ServeMux is gos basic router it maps paths to handler functions
+	DB *sql.DB
+	// ServeMux is gos basic router it maps paths to handler functions
 	Mux *http.ServeMux
 }
 
@@ -23,21 +22,26 @@ func NewServer(db *sql.DB) *Server {
 		Mux: mux,
 	}
 
-	// checking to see if server is running smoothly 
+	// checking to see if server is running smoothly
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"status":"ok"}`))
 	})
 
-mux.HandleFunc("/api/register", s.handleRegister)
+	mux.HandleFunc("/api/register", s.handleRegister)
 	mux.HandleFunc("/api/login", s.handleLogin)
 	mux.HandleFunc("/api/logout", s.handleLogout)
 	mux.HandleFunc("/api/me", s.handleMe)
+mux.HandleFunc("/api/posts", s.CreatePost)
+mux.HandleFunc("/api/feed", s.GetFeed)
+mux.HandleFunc("/api/me/posts", s.GetMyPosts)
+
 	// add posts, profiles, feed, bla bla
 
 	return s
 }
-//starting the server
+
+// starting the server
 func (s *Server) Listen(addr string) error {
 	log.Println("Starting server on", addr)
 
@@ -46,7 +50,6 @@ func (s *Server) Listen(addr string) error {
 
 	return http.ListenAndServe(addr, handler)
 }
-
 
 // CORSMiddleware adds CORS headers so the React dev server (localhost:5173) can talk to the Go API on localhost:8080 using cookies (added this when test failed)
 func (s *Server) CORSMiddleware(next http.Handler) http.Handler {
