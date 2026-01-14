@@ -1,17 +1,16 @@
 import { Routes, Route, Navigate } from "react-router-dom";
-import NavBar from "./components/NavBar";
+import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import FeedPage from "./pages/FeedPage";
 import ProfilePage from "./pages/ProfilePage";
-import Privateroute from "./components/Privateroute";
 import FollowRequestsPage from "./pages/FollowRequestsPage";
 import FollowersPage from "./pages/FollowersPage";
+import Privateroute from "./components/Privateroute";
 
 export default function App() {
   return (
-    <>
-      <NavBar />
+    <Layout>
       <Routes>
         {/* Public pages */}
         <Route path="/login" element={<Login />} />
@@ -53,8 +52,13 @@ export default function App() {
 
         {/* default */}
         <Route path="/" element={<Navigate to="/feed" replace />} />
-        <Route path="*" element={<div style={{ padding: 16 }}>Not found</div>} />
+        <Route path="*" element={
+          <div className="main-content page-center text-center">
+            <h1>404</h1>
+            <p className="mt-2">Page not found</p>
+          </div>
+        } />
       </Routes>
-    </>
+    </Layout>
   );
 }

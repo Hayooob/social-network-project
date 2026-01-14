@@ -13,7 +13,7 @@ export default function RegisterPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  async function handleSubmit(e) {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
 
@@ -27,7 +27,6 @@ export default function RegisterPage() {
       return;
     }
 
-    // ADDED: Frontend validation for password length before sending to backend
     if (password.length < 8) {
       setError("Password must be at least 8 characters.");
       return;
@@ -39,7 +38,6 @@ export default function RegisterPage() {
       navigate("/login");
     } catch (err) {
       console.error(err);
-      // CHANGED: Better error display - shows backend error message if available
       if (err.message) {
         setError(err.message);
       } else if (err.data && err.data.error) {
@@ -50,72 +48,89 @@ export default function RegisterPage() {
     } finally {
       setSubmitting(false);
     }
-  }
+  };
 
   return (
-    <div className="auth-page">
-      <h1>Register</h1>
+    <div className="auth-container">
+      <div className="card auth-card">
+        <div className="card-header">
+          <span className="card-header-title">Join Us</span>
+          <span className="card-header-star star-spin">✦</span>
+        </div>
+        <div className="card-body">
+          <div className="auth-title">
+            <h1>Register</h1>
+          </div>
 
-      <form onSubmit={handleSubmit} className="auth-form">
-        {error && <p className="auth-error">{error}</p>}
+          {error && <div className="form-error">{error}</div>}
 
-        <label>
-          Username
-          <input
-            type="text"
-            value={username}
-            autoComplete="username"
-            onChange={(e) => setUsername(e.target.value)}
-            required
-          />
-        </label>
+          <form onSubmit={handleSubmit}>
+            <div className="form-group">
+              <label className="form-label">Username</label>
+              <input
+                type="text"
+                className="form-input"
+                value={username}
+                autoComplete="username"
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Choose a username"
+                required
+              />
+            </div>
 
-        <label>
-          Email
-          <input
-            type="email"
-            value={email}
-            autoComplete="email"
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-        </label>
+            <div className="form-group">
+              <label className="form-label">Email</label>
+              <input
+                type="email"
+                className="form-input"
+                value={email}
+                autoComplete="email"
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter your email"
+                required
+              />
+            </div>
 
-        <label>
-          Password
-          <input
-            type="password"
-            value={password}
-            autoComplete="new-password"
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-        </label>
+            <div className="form-group">
+              <label className="form-label">Password</label>
+              <input
+                type="password"
+                className="form-input"
+                value={password}
+                autoComplete="new-password"
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Create a password"
+                required
+              />
+              <p className="form-helper">Must be at least 8 characters</p>
+            </div>
 
-        {/* ADDED: Helper text so user knows the requirement before submitting */}
-        <small style={{ color: "#666", marginTop: "-0.5rem" }}>
-          Password must be at least 8 characters
-        </small>
+            <div className="form-group">
+              <label className="form-label">Confirm Password</label>
+              <input
+                type="password"
+                className="form-input"
+                value={confirmPassword}
+                autoComplete="new-password"
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Confirm your password"
+                required
+              />
+            </div>
 
-        <label>
-          Confirm Password
-          <input
-            type="password"
-            value={confirmPassword}
-            autoComplete="new-password"
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            required
-          />
-        </label>
+            <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={submitting}>
+              {submitting ? "Creating account..." : "Register"}
+              <span>↗</span>
+            </button>
+          </form>
 
-        <button type="submit" disabled={submitting}>
-          {submitting ? "Creating account..." : "Register"}
-        </button>
-      </form>
-
-      <p style={{ marginTop: "1rem" }}>
-        Already have an account? <Link to="/login">Login here</Link>.
-      </p>
+          <div className="auth-footer">
+            <p className="auth-footer-text">
+              Already have an account? <Link to="/login">Login here</Link>
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
