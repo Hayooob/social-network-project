@@ -1,32 +1,41 @@
-Stage 3 – Basic posts, feed, and profile posts
+Stage 4 – Followers system (follow, unfollow, requests)
 
 Backend:
 
-- internal/models/posts.go 
-Define the Post struct that matches the posts table (also make the posts table in migrations folder if not done)
+- internal/db/migrations/004createfollowers.sql
+Create the followers table with id, follower_id, following_id, status (pending or accepted), and created_at. Add unique constraint on (follower_id, following_id) so no duplicate follows. Add foreign keys to users table with ON DELETE CASCADE.
 
-- internal/db/postdb.go 
-write helper functions to insert a new post, list recent posts for the global feed, and list posts by a specific user id ordered by newest first
+- internal/models/followers.go
+Define the Follow struct that matches the followers table. Include optional fields like FollowerName and FollowingName for when you join with users table.
 
-- internal/app/handlers.go 
-Add handlers for POST /api/posts to create a new post for the logged in user, GET /api/feed to return the public feed, and GET /api/me/posts to return posts by the current user
+- internal/db/followerdb.go
+Write helper functions: CreateFollow to insert a new follow, GetFollowStatus to check if a follow exists between two users, UpdateFollowStatus to change pending to accepted, DeleteFollow to remove a follow, GetFollowers to list who follows a user, GetFollowing to list who a user follows, and GetPendingRequests to list follow requests awaiting approval.
 
-- internal/app/server.go 
-Register the new post routes on the mux so the frontend can call /api/posts, /api/feed, and /api/me/posts next to the existing routes
+- internal/app/handlers.go
+Add handlers for POST /api/users/{id}/follow to follow a user (instant if public profile, pending if private), POST /api/users/{id}/unfollow to remove a follow, GET /api/me/followers to get your followers, GET /api/me/following to get who you follow, GET /api/me/follow-requests to get pending requests, POST /api/follow-requests/{id}/accept to accept a request, and POST /api/follow-requests/{id}/decline to decline a request.
+
+- internal/app/server.go
+Register the new follower routes on the mux. Since Go's default mux doesn't support URL params, you'll need to either parse the URL path manually in a handler or use a router like gorilla/mux.
 
 Frontend:
 
-- src/api/posts.js 
-Wrap the post endpoints with small helpers like getFeed, createPost, and getMyPosts, all using the existing ftchclient 
+- src/api/followers.js
+Wrap the follower endpoints with helpers like followUser, unfollowUser, getMyFollowers, getMyFollowing, getPendingRequests, acceptRequest, and declineRequest, all using the existing ftchclient.
 
-- src/components/PostForm.jsx 
-a form with a textarea and submit button that lets a logged in user create a new post and then refreshes the feed.
+- src/components/FollowButton.jsx
+A button that shows "Follow" when not following, "Requested" when pending, or "Following" when accepted. Clicking it calls the appropriate API function and updates its state.
 
-- src/components/PostCard.jsx 
-create a single post card with the author name, timestamp, and content 
+- src/components/FollowRequestCard.jsx
+A card showing a pending follow request with the requester's name and Accept/Decline buttons that call the API and remove the card on success.
 
-- src/pages/FeedPage.jsx 
-change it so it now calls getFeed on mount instead of the filler txt. (shows a list of PostCard components & include PostForm at the top so users can add new posts directly from the feedpage)
+- src/components/UserCard.jsx
+A small card showing a user's name and a FollowButton, used in follower/following lists.
 
-- src/pages/ProfilePage.jsx 
-it should useAuth to show the current users basic info & calls getMyPosts
+- src/pages/ProfilePage.jsx
+Update to show follower and following counts, and if viewing your own profile show a link to pending follow requests. Add a FollowButton if viewing someone else's profile.
+
+- src/pages/FollowRequestsPage.jsx
+A new page that calls getPendingRequests on mount and displays a list of FollowRequestCard components. Should be wrapped in Privateroute.
+
+- src/App.jsx
+Add routes for /follow-requests and later /users/:id for viewing other profiles.
