@@ -27,14 +27,26 @@ export default function RegisterPage() {
       return;
     }
 
+    // ADDED: Frontend validation for password length before sending to backend
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+
     try {
       setSubmitting(true);
       await register({ username, email, password, confirmPassword });
-      // after successful register, send them to login
       navigate("/login");
     } catch (err) {
       console.error(err);
-      setError(err.message || "Registration failed.");
+      // CHANGED: Better error display - shows backend error message if available
+      if (err.message) {
+        setError(err.message);
+      } else if (err.data && err.data.error) {
+        setError(err.data.error);
+      } else {
+        setError("Registration failed. Please try again.");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -79,6 +91,11 @@ export default function RegisterPage() {
             required
           />
         </label>
+
+        {/* ADDED: Helper text so user knows the requirement before submitting */}
+        <small style={{ color: "#666", marginTop: "-0.5rem" }}>
+          Password must be at least 8 characters
+        </small>
 
         <label>
           Confirm Password

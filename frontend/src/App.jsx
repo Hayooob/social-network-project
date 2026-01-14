@@ -5,6 +5,8 @@ import Register from "./pages/Register";
 import FeedPage from "./pages/FeedPage";
 import ProfilePage from "./pages/ProfilePage";
 import Privateroute from "./components/Privateroute";
+import FollowRequestsPage from "./pages/FollowRequestsPage";
+import FollowersPage from "./pages/FollowersPage";
 
 export default function App() {
   return (
@@ -29,6 +31,22 @@ export default function App() {
           element={
             <Privateroute>
               <ProfilePage />
+            </Privateroute>
+          }
+        />
+        <Route
+          path="/follow-requests"
+          element={
+            <Privateroute>
+              <FollowRequestsPage />
+            </Privateroute>
+          }
+        />
+        <Route
+          path="/followers"
+          element={
+            <Privateroute>
+              <FollowersPage />
             </Privateroute>
           }
         />
