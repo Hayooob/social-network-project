@@ -24,8 +24,7 @@ func OpenDb(path string) *sql.DB {
 }
 
 // reads all .sql mig files and runs them
-func RunMigrations(db *sql.DB) {
-	migrationsDir := "internal/db/migrations"
+func RunMigrations(db *sql.DB, migrationsDir string) {
 
 	entries, err := os.ReadDir(migrationsDir)
 	if err != nil {
