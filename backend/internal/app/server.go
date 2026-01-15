@@ -35,12 +35,14 @@ func NewServer(db *sql.DB) *Server {
 	mux.HandleFunc("/api/posts", s.CreatePost)
 	mux.HandleFunc("/api/feed", s.GetFeed)
 	mux.HandleFunc("/api/me/posts", s.GetMyPosts)
+	mux.HandleFunc("/api/users/suggestions", s.GetSuggestedUsers)
 	mux.HandleFunc("/api/me/followers", s.handleGetFollowers)
 	mux.HandleFunc("/api/me/following", s.handleGetFollowing)
 	mux.HandleFunc("/api/me/follow-requests", s.handleGetFollowRequests)
 	mux.HandleFunc("/api/me/follow-counts", s.handleGetFollowCounts)
 	mux.HandleFunc("/api/users/", s.handleUserFollowRoutes)
 	mux.HandleFunc("/api/follow-requests/", s.handleFollowRequestRoutes)
+	
 
 	// add posts, profiles, feed, bla bla
 

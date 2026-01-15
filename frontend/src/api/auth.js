@@ -3,7 +3,7 @@ import { get, post } from "./ftchclient";
 // POST /api/login
 export async function login(email, password) {
   const user = await post("/api/login", { email, password });
-  return user; n
+  return user;
 }
 
 // POST /api/register
@@ -37,5 +37,16 @@ export async function logout() {
   } catch (err) {
     if (err.status === 401 || err.status === 404) return;
     throw err;
+  }
+}
+
+// GET /api/users/suggestions
+export async function getSuggestedUsers() {
+  try {
+    const users = await get("/api/users/suggestions");
+    return users || [];
+  } catch (err) {
+    console.error("getSuggestedUsers error:", err);
+    return [];
   }
 }

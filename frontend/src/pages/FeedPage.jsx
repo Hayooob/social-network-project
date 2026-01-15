@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getFeed, createPost } from '../api/posts';
-import { getFollowCounts } from '../api/followers';
+import { getSuggestedUsers } from '../api/auth';
+import { followUser } from '../api/followers';
 import { useAuth } from '../VerifyAuth';
 
 export default function FeedPage() {
   const { user } = useAuth();
   const [posts, setPosts] = useState([]);
-  const [counts, setCounts] = useState({ followers: 0, following: 0 });
+  const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [content, setContent] = useState('');
   const [posting, setPosting] = useState(false);
@@ -15,10 +16,12 @@ export default function FeedPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const feedData = await getFeed();
-      const countsData = await getFollowCounts();
+      const [feedData, suggestionsData] = await Promise.all([
+        getFeed(),
+        getSuggestedUsers()
+      ]);
       setPosts(feedData);
-      setCounts(countsData);
+      setSuggestions(suggestionsData);
     } catch (err) {
       console.error('Error loading feed:', err);
     } finally {
@@ -44,6 +47,16 @@ export default function FeedPage() {
       alert('Failed to create post.');
     } finally {
       setPosting(false);
+    }
+  };
+
+  const handleFollow = async (userId) => {
+    try {
+      await followUser(userId);
+      // Remove from suggestions after following
+      setSuggestions(prev => prev.filter(u => u.id !== userId));
+    } catch (err) {
+      console.error('Error following user:', err);
     }
   };
 
@@ -200,27 +213,29 @@ export default function FeedPage() {
               <span className="section-title">Suggested</span>
               <span className="text-rose star-float-slow" style={{ fontSize: '12px' }}>✦</span>
             </div>
-            <div className="suggestion-item">
-              <div className="suggestion-info">
-                <div className="avatar avatar-tiny bg-blue">J</div>
-                <span className="suggestion-name">Jane Doe</span>
+            
+            {suggestions.length === 0 ? (
+              <div style={{ padding: '24px', textAlign: 'center' }}>
+                <p style={{ fontSize: '13px', opacity: 0.6, fontFamily: "'Cormorant Garamond', serif" }}>No suggestions yet</p>
               </div>
-              <button className="btn btn-outline">Follow</button>
-            </div>
-            <div className="suggestion-item">
-              <div className="suggestion-info">
-                <div className="avatar avatar-tiny bg-rose">T</div>
-                <span className="suggestion-name">Tom Brown</span>
-              </div>
-              <button className="btn btn-outline">Follow</button>
-            </div>
-            <div className="suggestion-item">
-              <div className="suggestion-info">
-                <div className="avatar avatar-tiny bg-dark">E</div>
-                <span className="suggestion-name">Emma Wilson</span>
-              </div>
-              <button className="btn btn-outline">Follow</button>
-            </div>
+            ) : (
+              suggestions.map((suggestedUser, index) => (
+                <div key={suggestedUser.id} className="suggestion-item">
+                  <div className="suggestion-info">
+                    <div className={`avatar avatar-tiny ${index % 3 === 0 ? 'bg-blue' : index % 3 === 1 ? 'bg-rose' : 'bg-dark'}`}>
+                      {suggestedUser.full_name ? suggestedUser.full_name.charAt(0).toUpperCase() : '?'}
+                    </div>
+                    <span className="suggestion-name">{suggestedUser.full_name || 'Unknown'}</span>
+                  </div>
+                  <button 
+                    className="btn btn-outline"
+                    onClick={() => handleFollow(suggestedUser.id)}
+                  >
+                    Follow
+                  </button>
+                </div>
+              ))
+            )}
           </div>
 
           <div className="quote-box">

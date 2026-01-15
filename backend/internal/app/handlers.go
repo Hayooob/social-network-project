@@ -291,3 +291,43 @@ func (s *Server) GetMyPosts(w http.ResponseWriter, r *http.Request) {
 	
 	writeJSON(w, http.StatusOK, posts)
 }
+
+// GetSuggestedUsers handles GET /api/users/suggestions
+func (s *Server) GetSuggestedUsers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	user := CurrentUser(r.Context())
+	if user == nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	users, err := db.GetSuggestedUsers(s.DB, user.ID, 5)
+	if err != nil {
+		log.Println("GetSuggestedUsers error:", err)
+		writeError(w, http.StatusInternalServerError, "failed to get suggestions")
+		return
+	}
+
+	// Return safe user data (no password hashes)
+	var suggestions []map[string]any
+	for _, u := range users {
+		suggestions = append(suggestions, map[string]any{
+			"id":        u.ID,
+			"uuid":      u.UUID,
+			"full_name": u.FullName,
+			"email":     u.Email,
+			"nickname":  u.Nickname,
+		})
+	}
+
+	// Return empty array instead of null if no suggestions
+	if suggestions == nil {
+		suggestions = []map[string]any{}
+	}
+
+	writeJSON(w, http.StatusOK, suggestions)
+}

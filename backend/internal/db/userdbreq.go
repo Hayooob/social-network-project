@@ -138,3 +138,55 @@ func GetUserByID(db *sql.DB, id int64) (*models.User, error) {
 	u.IsPrivate = isPrivateInt == 1
 	return &u, nil
 }
+
+// GetSuggestedUsers returns users that the current user is NOT following
+func GetSuggestedUsers(db *sql.DB, currentUserID int64, limit int) ([]models.User, error) {
+	query := `
+		SELECT 
+			id, uuid, email, full_name, date_of_birth, 
+			avatar_url, nickname, about_me, is_private, created_at
+		FROM users
+		WHERE id != ?
+		AND id NOT IN (
+			SELECT following_id 
+			FROM followers 
+			WHERE follower_id = ? 
+			AND (status = 'accepted' OR status = 'pending')
+		)
+		ORDER BY created_at DESC
+		LIMIT ?
+	`
+
+	rows, err := db.Query(query, currentUserID, currentUserID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []models.User
+	for rows.Next() {
+		var u models.User
+		var isPrivateInt int
+
+		err := rows.Scan(
+			&u.ID,
+			&u.UUID,
+			&u.Email,
+			&u.FullName,
+			&u.DateOfBirth,
+			&u.AvatarURL,
+			&u.Nickname,
+			&u.AboutMe,
+			&isPrivateInt,
+			&u.CreatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		u.IsPrivate = isPrivateInt == 1
+		users = append(users, u)
+	}
+
+	return users, rows.Err()
+}
