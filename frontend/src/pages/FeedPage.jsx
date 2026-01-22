@@ -2,13 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getFeed, createPost } from '../api/posts';
 import { getSuggestedUsers } from '../api/auth';
-import { followUser } from '../api/followers';
+import { followUser, getFollowCounts } from '../api/followers';
 import { useAuth } from '../VerifyAuth';
 
 export default function FeedPage() {
   const { user } = useAuth();
   const [posts, setPosts] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
+  const [counts, setCounts] = useState({ followers: 0, following: 0 });
   const [loading, setLoading] = useState(true);
   const [content, setContent] = useState('');
   const [posting, setPosting] = useState(false);
@@ -16,12 +17,14 @@ export default function FeedPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [feedData, suggestionsData] = await Promise.all([
+      const [feedData, suggestionsData, countsData] = await Promise.all([
         getFeed(),
-        getSuggestedUsers()
+        getSuggestedUsers(),
+        getFollowCounts()
       ]);
       setPosts(feedData);
       setSuggestions(suggestionsData);
+      setCounts(countsData);
     } catch (err) {
       console.error('Error loading feed:', err);
     } finally {
@@ -53,8 +56,8 @@ export default function FeedPage() {
   const handleFollow = async (userId) => {
     try {
       await followUser(userId);
-      // Remove from suggestions after following
       setSuggestions(prev => prev.filter(u => u.id !== userId));
+      fetchData();
     } catch (err) {
       console.error('Error following user:', err);
     }
