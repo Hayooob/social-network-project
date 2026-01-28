@@ -32,6 +32,7 @@ func NewServer(db *sql.DB) *Server {
 	mux.HandleFunc("/api/login", s.handleLogin)
 	mux.HandleFunc("/api/logout", s.handleLogout)
 	mux.HandleFunc("/api/me", s.handleMe)
+	mux.HandleFunc("/api/me/privacy", s.handleTogglePrivacy)
 	mux.HandleFunc("/api/posts", s.CreatePost)
 	mux.HandleFunc("/api/feed", s.GetFeed)
 	mux.HandleFunc("/api/me/posts", s.GetMyPosts)

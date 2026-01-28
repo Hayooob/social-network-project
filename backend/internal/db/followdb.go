@@ -230,3 +230,22 @@ func GetFollowingCount(db *sql.DB, userID int) (int, error) {
 	err := db.QueryRow(stmt, userID).Scan(&count)
 	return count, err
 }
+// IsFollowing returns true if followerID follows followingID with status='accepted'.
+func IsFollowing(db *sql.DB, followerID int, followingID int) (bool, error) {
+    stmt := `
+        SELECT 1
+        FROM followers
+        WHERE follower_id = ? AND following_id = ? AND status = 'accepted'
+        LIMIT 1
+    `
+
+    var one int
+    err := db.QueryRow(stmt, followerID, followingID).Scan(&one)
+    if err != nil {
+        if errors.Is(err, sql.ErrNoRows) {
+            return false, nil
+        }
+        return false, err
+    }
+    return true, nil
+}

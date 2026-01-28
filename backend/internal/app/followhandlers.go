@@ -18,6 +18,14 @@ func extractUserIDFromPath(path string, prefix string, suffix string) (int, erro
 func (s *Server) handleUserFollowRoutes(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Path
 
+	// Stage 5: GET /api/users/{id}
+	// (must be checked BEFORE follow/unfollow, otherwise it will fall into not found)
+	trimmed := strings.TrimPrefix(path, "/api/users/")
+	if trimmed != "" && !strings.Contains(trimmed, "/") && r.Method == http.MethodGet {
+		s.handleGetUserProfile(w, r)
+		return
+	}
+
 	if strings.HasSuffix(path, "/follow") {
 		s.handleFollow(w, r)
 		return

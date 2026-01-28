@@ -2,12 +2,14 @@ package app
 
 import (
 	"encoding/json"
-	"net/http"
-	"social-network/internal/db"
 	"log"
+	"net/http"
+	"strconv"
+
+	"social-network/internal/db"
 )
 
-//helpers:
+// helpers:
 func writeJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -18,7 +20,9 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
 }
 
-// register:
+// -------------------------
+// AUTH: register / login / logout / me
+// -------------------------
 
 type registerRequest struct {
 	Username        string `json:"username"`
@@ -39,12 +43,10 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// validate required fields
 	if req.Username == "" || req.Email == "" || req.Password == "" || req.ConfirmPassword == "" {
 		writeError(w, http.StatusBadRequest, "missing required fields")
 		return
 	}
-
 	if req.Password != req.ConfirmPassword {
 		writeError(w, http.StatusBadRequest, "passwords do not match")
 		return
@@ -52,7 +54,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 
 	// map frontend fields to DB fields
 	fullName := req.Username
-	dateOfBirth := "" // placeholder to satisfy NOT NULL TEXT
+	dateOfBirth := "" // placeholder to satisfy NOT NULL TEXT (your earlier stages)
 
 	user, err := RegisterUser(r.Context(), s.DB, fullName, dateOfBirth, req.Email, req.Password)
 	if err != nil {
@@ -72,13 +74,12 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		"email":         user.Email,
 		"full_name":     user.FullName,
 		"date_of_birth": user.DateOfBirth,
+		"is_private":    user.IsPrivate,
 		"created_at":    user.CreatedAt,
 	}
 
 	writeJSON(w, http.StatusCreated, resp)
 }
-
-// login:
 
 type loginRequest struct {
 	Email    string `json:"email"`
@@ -128,13 +129,12 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		"email":         user.Email,
 		"full_name":     user.FullName,
 		"date_of_birth": user.DateOfBirth,
+		"is_private":    user.IsPrivate,
 		"created_at":    user.CreatedAt,
 	}
 
 	writeJSON(w, http.StatusOK, resp)
 }
-
-// logout:
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -145,7 +145,6 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("session_id")
 	if err == nil && cookie.Value != "" {
 		_ = LogoutUser(r.Context(), s.DB, cookie.Value)
-		// Clear cookie
 		http.SetCookie(w, &http.Cookie{
 			Name:     "session_id",
 			Value:    "",
@@ -156,11 +155,8 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	// Even if there was no cookie treat as success
 	writeJSON(w, http.StatusOK, map[string]string{"message": "logged out"})
 }
-
-// me (current logged in user):
 
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -180,67 +176,258 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		"email":         user.Email,
 		"full_name":     user.FullName,
 		"date_of_birth": user.DateOfBirth,
+		"is_private":    user.IsPrivate,
 		"created_at":    user.CreatedAt,
 	}
 
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// POST HANDLERS
-
-// CreatePost handles POST /api/posts - creates a new post for the logged-in user
-func (s *Server) CreatePost(w http.ResponseWriter, r *http.Request) {
-	log.Println("=== CreatePost called ===")
-	log.Println("Method:", r.Method)
-	
+// -------------------------
+// STAGE 5: toggle privacy
+// POST /api/me/privacy
+// -------------------------
+func (s *Server) handleTogglePrivacy(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
-	// Get current user from context (set by AuthMiddleware)
+	user := CurrentUser(r.Context())
+	if user == nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	newVal := !user.IsPrivate
+	if err := db.UpdateUserPrivacy(s.DB, user.ID, newVal); err != nil {
+		log.Println("UpdateUserPrivacy error:", err)
+		writeError(w, http.StatusInternalServerError, "failed to update privacy")
+		return
+	}
+
+	// return new value (frontend will update state)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"is_private": newVal,
+	})
+}
+
+// -------------------------
+// STAGE 5: view other user profile
+// GET /api/users/{id}
+// -------------------------
+func (s *Server) handleGetUserProfile(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	currentUser := CurrentUser(r.Context())
+	if currentUser == nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	// ID comes from path: /api/users/{id}
+	// routing is done in followhandlers.go
+	idStr := r.URL.Query().Get("_id") // not used normally
+	_ = idStr                         // keep silent; actual parse done in followhandlers.go
+
+	// Extract id from URL path here (safer in case followhandlers passes directly too)
+	trimmed := r.URL.Path[len("/api/users/"):]
+	// if anything after id exists, it's not this handler's job
+	if trimmed == "" || containsSlash(trimmed) {
+		writeError(w, http.StatusBadRequest, "invalid user ID")
+		return
+	}
+
+	targetID64, err := strconv.ParseInt(trimmed, 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid user ID")
+		return
+	}
+
+	targetUser, err := db.GetUserByID(s.DB, targetID64)
+	if err != nil {
+		log.Println("GetUserByID error:", err)
+		writeError(w, http.StatusInternalServerError, "failed to get user")
+		return
+	}
+	if targetUser == nil {
+		writeError(w, http.StatusNotFound, "user not found")
+		return
+	}
+
+	// If viewing yourself: full info + all your posts
+	if targetUser.ID == currentUser.ID {
+		posts, err := db.GetPostsByUserID(s.DB, int(currentUser.ID))
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to fetch posts")
+			return
+		}
+
+		followerCount, _ := db.GetFollowerCount(s.DB, int(currentUser.ID))
+		followingCount, _ := db.GetFollowingCount(s.DB, int(currentUser.ID))
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"user": map[string]any{
+				"id":            targetUser.ID,
+				"uuid":          targetUser.UUID,
+				"email":         targetUser.Email,
+				"full_name":     targetUser.FullName,
+				"date_of_birth": targetUser.DateOfBirth,
+				"avatar_url":    targetUser.AvatarURL,
+				"nickname":      targetUser.Nickname,
+				"about_me":      targetUser.AboutMe,
+				"is_private":    targetUser.IsPrivate,
+				"created_at":    targetUser.CreatedAt,
+			},
+			"counts": map[string]any{
+				"followers": followerCount,
+				"following": followingCount,
+			},
+			"posts": posts,
+			"viewer": map[string]any{
+				"is_following": false,
+				"is_self":      true,
+				"can_view":     true,
+			},
+		})
+		return
+	}
+
+	// Determine if current user follows target (accepted)
+	isFollowing, err := db.IsFollowing(s.DB, int(currentUser.ID), int(targetUser.ID))
+	if err != nil {
+		log.Println("IsFollowing error:", err)
+		writeError(w, http.StatusInternalServerError, "failed to check follow status")
+		return
+	}
+
+	canViewFull := !targetUser.IsPrivate || isFollowing
+
+	followerCount, _ := db.GetFollowerCount(s.DB, int(targetUser.ID))
+	followingCount, _ := db.GetFollowingCount(s.DB, int(targetUser.ID))
+
+	// Private profile and not a follower => limited response
+	if !canViewFull {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"user": map[string]any{
+				"id":         targetUser.ID,
+				"uuid":       targetUser.UUID,
+				"full_name":  targetUser.FullName,
+				"avatar_url": targetUser.AvatarURL,
+				"nickname":   targetUser.Nickname,
+				"is_private": targetUser.IsPrivate,
+			},
+			"counts": map[string]any{
+				"followers": followerCount,
+				"following": followingCount,
+			},
+			"posts": []any{}, // hidden
+			"viewer": map[string]any{
+				"is_following": false,
+				"is_self":      false,
+				"can_view":     false,
+			},
+		})
+		return
+	}
+
+	// Public profile OR follower => show profile + visible posts (public + almost-private)
+	posts, err := db.GetPostsByUserVisible(s.DB, int(targetUser.ID), true)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to fetch posts")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"user": map[string]any{
+			"id":            targetUser.ID,
+			"uuid":          targetUser.UUID,
+			"email":         targetUser.Email,
+			"full_name":     targetUser.FullName,
+			"date_of_birth": targetUser.DateOfBirth,
+			"avatar_url":    targetUser.AvatarURL,
+			"nickname":      targetUser.Nickname,
+			"about_me":      targetUser.AboutMe,
+			"is_private":    targetUser.IsPrivate,
+			"created_at":    targetUser.CreatedAt,
+		},
+		"counts": map[string]any{
+			"followers": followerCount,
+			"following": followingCount,
+		},
+		"posts": posts,
+		"viewer": map[string]any{
+			"is_following": isFollowing,
+			"is_self":      false,
+			"can_view":     true,
+		},
+	})
+}
+
+// tiny helper
+func containsSlash(s string) bool {
+	for _, ch := range s {
+		if ch == '/' {
+			return true
+		}
+	}
+	return false
+}
+
+// -------------------------
+// POSTS (existing stage 3)
+// -------------------------
+
+// CreatePost handles POST /api/posts - creates a new post for the logged-in user
+func (s *Server) CreatePost(w http.ResponseWriter, r *http.Request) {
+	log.Println("=== CreatePost called ===")
+	log.Println("Method:", r.Method)
+
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
 	user := CurrentUser(r.Context())
 	log.Println("Current user:", user)
 	if user == nil {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-		
-	// Parse request body
+
 	var req struct {
 		Content string `json:"content"`
 		Privacy string `json:"privacy"`
 	}
-	
+
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	
-	// Validate content
+
 	if req.Content == "" {
 		writeError(w, http.StatusBadRequest, "content cannot be empty")
 		return
 	}
-	
-	// Default privacy to public if not specified
+
 	if req.Privacy == "" {
 		req.Privacy = "public"
 	}
-	
-	// Validate privacy value
+
 	if req.Privacy != "public" && req.Privacy != "private" && req.Privacy != "almost-private" {
 		writeError(w, http.StatusBadRequest, "invalid privacy setting")
 		return
 	}
-	
-	// Create the post
+
 	post, err := db.InsertPost(s.DB, int(user.ID), req.Content, req.Privacy)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create post")
 		return
 	}
-	
+
 	writeJSON(w, http.StatusCreated, post)
 }
 
@@ -249,14 +436,13 @@ func (s *Server) GetFeed(w http.ResponseWriter, r *http.Request) {
 	log.Println("=== GetFeed called ===")
 	log.Println("Method:", r.Method)
 	log.Println("DB is nil?", s.DB == nil)
-	
+
 	if r.Method != http.MethodGet {
 		log.Println("Method not allowed")
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
-	// Get recent public posts (limit to 50)
 	log.Println("Calling GetPublicFeed...")
 	posts, err := db.GetPublicFeed(s.DB, 50)
 	if err != nil {
@@ -264,10 +450,11 @@ func (s *Server) GetFeed(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to fetch feed")
 		return
 	}
-	
+
 	log.Println("Found", len(posts), "posts")
 	writeJSON(w, http.StatusOK, posts)
 }
+
 // GetMyPosts handles GET /api/me/posts - returns posts by the current user
 func (s *Server) GetMyPosts(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -275,20 +462,18 @@ func (s *Server) GetMyPosts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get current user from context
 	user := CurrentUser(r.Context())
 	if user == nil {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-	
-	// Fetch user's posts
+
 	posts, err := db.GetPostsByUserID(s.DB, int(user.ID))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to fetch posts")
 		return
 	}
-	
+
 	writeJSON(w, http.StatusOK, posts)
 }
 
@@ -312,19 +497,18 @@ func (s *Server) GetSuggestedUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return safe user data (no password hashes)
 	var suggestions []map[string]any
 	for _, u := range users {
 		suggestions = append(suggestions, map[string]any{
-			"id":        u.ID,
-			"uuid":      u.UUID,
-			"full_name": u.FullName,
-			"email":     u.Email,
-			"nickname":  u.Nickname,
+			"id":         u.ID,
+			"uuid":       u.UUID,
+			"full_name":  u.FullName,
+			"email":      u.Email,
+			"nickname":   u.Nickname,
+			"is_private": u.IsPrivate,
 		})
 	}
 
-	// Return empty array instead of null if no suggestions
 	if suggestions == nil {
 		suggestions = []map[string]any{}
 	}

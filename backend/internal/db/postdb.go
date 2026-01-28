@@ -120,3 +120,33 @@ func scanPosts(rows *sql.Rows) ([]models.Post, error) {
 	
 	return posts, nil
 }
+// GetPostsByUserVisible retrieves posts by a user filtered by viewer visibility.
+// - If includeAlmost is true, it includes privacy='almost-private' in addition to public.
+// - It never includes privacy='private' (stage 5 does not implement per-follower allow lists).
+func GetPostsByUserVisible(db *sql.DB, userID int, includeAlmost bool) ([]models.Post, error) {
+    query := `
+        SELECT p.id, p.user_id, p.content, p.privacy, p.created_at,
+               u.full_name as author_name
+        FROM posts p
+        JOIN users u ON p.user_id = u.id
+        WHERE p.user_id = ?
+          AND (
+            p.privacy = 'public'
+            OR (? = 1 AND p.privacy = 'almost-private')
+          )
+        ORDER BY p.created_at DESC
+    `
+
+    flag := 0
+    if includeAlmost {
+        flag = 1
+    }
+
+    rows, err := db.Query(query, userID, flag)
+    if err != nil {
+        return nil, err
+    }
+    defer rows.Close()
+
+    return scanPosts(rows)
+}

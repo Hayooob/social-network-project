@@ -8,6 +8,9 @@ import FollowRequestsPage from "./pages/FollowRequestsPage";
 import FollowersPage from "./pages/FollowersPage";
 import Privateroute from "./components/Privateroute";
 
+// ✅ Stage 5
+import UserProfilePage from "./pages/UserProfilePage";
+
 export default function App() {
   return (
     <Layout>
@@ -50,14 +53,27 @@ export default function App() {
           }
         />
 
+        {/* ✅ Stage 5 route */}
+        <Route
+          path="/users/:id"
+          element={
+            <Privateroute>
+              <UserProfilePage />
+            </Privateroute>
+          }
+        />
+
         {/* default */}
         <Route path="/" element={<Navigate to="/feed" replace />} />
-        <Route path="*" element={
-          <div className="main-content page-center text-center">
-            <h1>404</h1>
-            <p className="mt-2">Page not found</p>
-          </div>
-        } />
+        <Route
+          path="*"
+          element={
+            <div className="main-content page-center text-center">
+              <h1>404</h1>
+              <p className="mt-2">Page not found</p>
+            </div>
+          }
+        />
       </Routes>
     </Layout>
   );
