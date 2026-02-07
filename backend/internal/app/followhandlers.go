@@ -110,6 +110,22 @@ func (s *Server) handleFollow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Create notification for the target user
+	fromUserID := int(currentUser.ID)
+	if status == "pending" {
+		// Notify target user about follow request
+		_, err = db.CreateNotification(s.DB, targetID, models.NotificationTypeFollowRequest, nil, &fromUserID, "sent you a follow request")
+		if err != nil {
+			log.Println("Failed to create follow request notification:", err)
+		}
+	} else {
+		// Notify target user that someone followed them (public profile)
+		_, err = db.CreateNotification(s.DB, targetID, models.NotificationTypeFollowAccept, nil, &fromUserID, "started following you")
+		if err != nil {
+			log.Println("Failed to create follow notification:", err)
+		}
+	}
+
 	message := "now following user"
 	if status == "pending" {
 		message = "follow request sent"
@@ -261,6 +277,13 @@ func (s *Server) handleAcceptFollow(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Create notification for the requester that their request was accepted
+	fromUserID := int(currentUser.ID)
+	_, err = db.CreateNotification(s.DB, followerID, models.NotificationTypeFollowAccept, nil, &fromUserID, "accepted your follow request")
+	if err != nil {
+		log.Println("Failed to create follow accept notification:", err)
+	}
+
 	writeJSON(w, http.StatusOK, map[string]string{"message": "follow request accepted"})
 }
 
@@ -331,7 +354,7 @@ func (s *Server) handleGetFollowCounts(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleGetFriends returns users who mutually follow each other
+// Friends endpoints for messaging
 func (s *Server) handleGetFriends(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -373,7 +396,6 @@ func (s *Server) handleGetFriends(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
-// handleCheckMutual checks if current user and target user are mutual friends
 func (s *Server) handleCheckMutual(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -386,7 +408,6 @@ func (s *Server) handleCheckMutual(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get user ID from query param
 	targetID := r.URL.Query().Get("user_id")
 	if targetID == "" {
 		writeError(w, http.StatusBadRequest, "user_id required")
