@@ -1,17 +1,18 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { UserPlus, UserCheck, Mail, Bell } from 'lucide-react';
 
 export default function NotificationCard({ notification, onMarkRead }) {
   const getIcon = (type) => {
     switch (type) {
       case 'follow_request':
-        return '👤';
+        return <UserPlus size={18} color="var(--white)" />;
       case 'follow_accept':
-        return '✓';
+        return <UserCheck size={18} color="var(--white)" />;
       case 'new_message':
-        return '✉';
+        return <Mail size={18} color="var(--white)" />;
       default:
-        return '🔔';
+        return <Bell size={18} color="var(--white)" />;
     }
   };
 
@@ -91,11 +92,10 @@ export default function NotificationCard({ notification, onMarkRead }) {
           width: '40px',
           height: '40px',
           borderRadius: '50%',
-          backgroundColor: notification.is_read ? 'var(--soft-linen)' : 'var(--dusk-blue)',
+          backgroundColor: notification.is_read ? 'var(--jet-black)' : 'var(--dusk-blue)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: '16px',
           flexShrink: 0
         }}>
           {getIcon(notification.type)}

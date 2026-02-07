@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { getNotifications, markNotificationRead, markAllNotificationsRead } from '../api/notifications';
-import NotificationCard from '../components/Notificationcard';
+import NotificationCard from '../components/NotificationCard';
+import { Bell } from 'lucide-react';
 
 export default function NotificationsPage() {
   const [notifications, setNotifications] = useState([]);
@@ -92,7 +93,7 @@ export default function NotificationsPage() {
             </div>
           ) : notifications.length === 0 ? (
             <div style={{ padding: '40px', textAlign: 'center' }}>
-              <span style={{ fontSize: '48px', display: 'block', marginBottom: '16px' }}>🔔</span>
+              <Bell size={48} color="var(--dusk-blue)" strokeWidth={1.5} style={{ marginBottom: '16px' }} />
               <p style={{ 
                 opacity: 0.6, 
                 fontFamily: "'Cormorant Garamond', serif",

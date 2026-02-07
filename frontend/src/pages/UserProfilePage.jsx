@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { getUserProfile } from "../api/users";
+import { checkMutual } from "../api/followers";
 import FollowButton from "../components/FollowButton";
+import { MessageCircle } from "lucide-react";
 
 export default function UserProfilePage() {
   const { id } = useParams();
-  const [data, setData] = useState(null); // { user, counts, posts, viewer }
+  const navigate = useNavigate();
+  const [data, setData] = useState(null);
+  const [isMutual, setIsMutual] = useState(false);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
 
@@ -16,8 +20,14 @@ export default function UserProfilePage() {
       setLoading(true);
       setErr("");
       try {
-        const res = await getUserProfile(id);
-        if (!cancelled) setData(res);
+        const [profileRes, mutualRes] = await Promise.all([
+          getUserProfile(id),
+          checkMutual(id)
+        ]);
+        if (!cancelled) {
+          setData(profileRes);
+          setIsMutual(mutualRes);
+        }
       } catch (e) {
         if (!cancelled) setErr(e?.message || "Failed to load profile");
       } finally {
@@ -30,6 +40,10 @@ export default function UserProfilePage() {
       cancelled = true;
     };
   }, [id]);
+
+  const handleMessage = () => {
+    navigate(`/messages/${id}`);
+  };
 
   if (loading) {
     return (
@@ -76,8 +90,20 @@ export default function UserProfilePage() {
           </p>
 
           {!viewer?.is_self && (
-            <div style={{ marginTop: 12 }}>
+            <div style={{ marginTop: 12, display: 'flex', gap: '12px', alignItems: 'center' }}>
               <FollowButton userId={user.id} isPrivate={user.is_private} />
+              
+              {/* Message Button - only show if mutual friends */}
+              {isMutual && (
+                <button 
+                  className="btn btn-outline"
+                  onClick={handleMessage}
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                >
+                  <MessageCircle size={16} />
+                  Message
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -109,4 +135,3 @@ export default function UserProfilePage() {
     </div>
   );
 }
-
