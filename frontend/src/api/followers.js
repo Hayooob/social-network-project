@@ -63,3 +63,26 @@ export async function getFollowCounts() {
     throw err;
   }
 }
+
+// Get list of mutual friends (both follow each other)
+export async function getFriends() {
+  try {
+    const data = await get("/api/me/friends");
+    return data || [];
+  } catch (err) {
+    if (err.status === 401) {
+      return [];
+    }
+    throw err;
+  }
+}
+
+// Check if current user and target user are mutual friends
+export async function checkMutual(userId) {
+  try {
+    const data = await get("/api/check-mutual?user_id=" + userId);
+    return data?.is_mutual || false;
+  } catch (err) {
+    return false;
+  }
+}
