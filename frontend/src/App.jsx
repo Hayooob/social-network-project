@@ -8,8 +8,12 @@ import FollowRequestsPage from "./pages/FollowRequestsPage";
 import FollowersPage from "./pages/FollowersPage";
 import Privateroute from "./components/Privateroute";
 
-// ✅ Stage 5
+//  Stage 5
 import UserProfilePage from "./pages/UserProfilePage";
+
+//  Stage 6
+import MessagesPage from "./pages/MessagesPage";
+import NotificationsPage from "./pages/NotificationsPage";
 
 export default function App() {
   return (
@@ -53,12 +57,38 @@ export default function App() {
           }
         />
 
-        {/* ✅ Stage 5 route */}
+        {/*  Stage 5 route */}
         <Route
           path="/users/:id"
           element={
             <Privateroute>
               <UserProfilePage />
+            </Privateroute>
+          }
+        />
+
+        {/*  Stage 6 routes */}
+        <Route
+          path="/messages"
+          element={
+            <Privateroute>
+              <MessagesPage />
+            </Privateroute>
+          }
+        />
+        <Route
+          path="/messages/:userId"
+          element={
+            <Privateroute>
+              <MessagesPage />
+            </Privateroute>
+          }
+        />
+        <Route
+          path="/notifications"
+          element={
+            <Privateroute>
+              <NotificationsPage />
             </Privateroute>
           }
         />

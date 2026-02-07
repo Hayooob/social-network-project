@@ -18,6 +18,7 @@ var upgrader = websocket.Upgrader{
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
 		origin := r.Header.Get("Origin")
+		log.Printf("WebSocket CheckOrigin: %s", origin)
 		return origin == "http://localhost:5173"
 	},
 }
@@ -49,6 +50,7 @@ func NewHub(database *sql.DB) *Hub {
 }
 
 func (h *Hub) Run() {
+	log.Println("Hub started running")
 	for {
 		select {
 		case client := <-h.Register:
@@ -100,7 +102,17 @@ func (h *Hub) broadcastOnlineUsers() {
 	}
 
 	data, _ := json.Marshal(msg)
-	h.Broadcast <- data
+	
+	// Send directly to clients instead of using Broadcast channel to avoid deadlock
+	h.mu.RLock()
+	for _, client := range h.Clients {
+		select {
+		case client.Send <- data:
+		default:
+			// Skip if channel is full
+		}
+	}
+	h.mu.RUnlock()
 }
 
 func (h *Hub) SendToUser(userID int64, message []byte) {
@@ -110,10 +122,13 @@ func (h *Hub) SendToUser(userID int64, message []byte) {
 	if client, ok := h.Clients[userID]; ok {
 		select {
 		case client.Send <- message:
+			log.Printf("Message sent to user %d", userID)
 		default:
 			close(client.Send)
 			delete(h.Clients, userID)
 		}
+	} else {
+		log.Printf("User %d is not online", userID)
 	}
 }
 
@@ -125,25 +140,32 @@ func (h *Hub) IsUserOnline(userID int64) bool {
 }
 
 type WSMessage struct {
-	Type       string `json:"type"`
-	To         int64  `json:"to,omitempty"`
-	Content    string `json:"content,omitempty"`
-	MessageID  int    `json:"message_id,omitempty"`
+	Type      string `json:"type"`
+	To        int64  `json:"to,omitempty"`
+	Content   string `json:"content,omitempty"`
+	MessageID int    `json:"message_id,omitempty"`
 }
 
 func (s *Server) HandleWebSocket(hub *Hub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		log.Println("WebSocket connection attempt...")
+		
 		user := CurrentUser(r.Context())
 		if user == nil {
+			log.Println("WebSocket: No user in context - unauthorized")
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
+		
+		log.Printf("WebSocket: User %s (ID: %d) attempting to connect", user.FullName, user.ID)
 
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			log.Println("WebSocket upgrade error:", err)
 			return
 		}
+		
+		log.Printf("WebSocket: Connection upgraded for user %s", user.FullName)
 
 		client := &Client{
 			UserID:   user.ID,
@@ -161,25 +183,33 @@ func (s *Server) HandleWebSocket(hub *Hub) http.HandlerFunc {
 
 func (c *Client) readPump(hub *Hub, database *sql.DB) {
 	defer func() {
+		log.Printf("readPump ending for user %d", c.UserID)
 		hub.Unregister <- c
 		c.Conn.Close()
 	}()
 
 	c.Conn.SetReadLimit(512 * 1024)
-	c.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	c.Conn.SetReadDeadline(time.Now().Add(120 * time.Second)) // Increased to 120 seconds
 	c.Conn.SetPongHandler(func(string) error {
-		c.Conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		log.Printf("Pong received from user %d", c.UserID)
+		c.Conn.SetReadDeadline(time.Now().Add(120 * time.Second))
 		return nil
 	})
+
+	log.Printf("readPump started for user %d", c.UserID)
 
 	for {
 		_, message, err := c.Conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("WebSocket error: %v", err)
+				log.Printf("WebSocket read error for user %d: %v", c.UserID, err)
+			} else {
+				log.Printf("WebSocket closed for user %d: %v", c.UserID, err)
 			}
 			break
 		}
+
+		log.Printf("Message received from user %d: %s", c.UserID, string(message))
 
 		var wsMsg WSMessage
 		if err := json.Unmarshal(message, &wsMsg); err != nil {
@@ -187,13 +217,18 @@ func (c *Client) readPump(hub *Hub, database *sql.DB) {
 			continue
 		}
 
+		log.Printf("Parsed message - Type: %s, To: %d, Content: %s", wsMsg.Type, wsMsg.To, wsMsg.Content)
+
 		switch wsMsg.Type {
 		case "chat_message":
+			log.Println("Handling chat_message...")
 			handleChatMessage(c, hub, database, wsMsg)
 		case "typing":
 			handleTyping(c, hub, wsMsg)
 		case "mark_read":
 			handleMarkRead(c, database, wsMsg)
+		default:
+			log.Printf("Unknown message type: %s", wsMsg.Type)
 		}
 	}
 }
@@ -203,7 +238,10 @@ func (c *Client) writePump() {
 	defer func() {
 		ticker.Stop()
 		c.Conn.Close()
+		log.Printf("writePump ended for user %d", c.UserID)
 	}()
+
+	log.Printf("writePump started for user %d", c.UserID)
 
 	for {
 		select {
@@ -231,8 +269,10 @@ func (c *Client) writePump() {
 			}
 
 		case <-ticker.C:
+			log.Printf("Sending ping to user %d", c.UserID)
 			c.Conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				log.Printf("Ping failed for user %d: %v", c.UserID, err)
 				return
 			}
 		}
@@ -240,15 +280,20 @@ func (c *Client) writePump() {
 }
 
 func handleChatMessage(sender *Client, hub *Hub, database *sql.DB, wsMsg WSMessage) {
+	log.Printf("handleChatMessage: from=%d, to=%d, content=%s", sender.UserID, wsMsg.To, wsMsg.Content)
+	
 	if wsMsg.To == 0 || wsMsg.Content == "" {
+		log.Println("handleChatMessage: Missing 'to' or 'content'")
 		return
 	}
 
+	log.Println("Saving message to database...")
 	msg, err := db.SendMessage(database, int(sender.UserID), int(wsMsg.To), wsMsg.Content)
 	if err != nil {
 		log.Println("Failed to save message:", err)
 		return
 	}
+	log.Printf("Message saved with ID: %d", msg.ID)
 
 	response := map[string]any{
 		"type":         "chat_message",
@@ -258,15 +303,23 @@ func handleChatMessage(sender *Client, hub *Hub, database *sql.DB, wsMsg WSMessa
 	}
 
 	data, _ := json.Marshal(response)
+	log.Printf("Sending response: %s", string(data))
 
+	// Send to sender
 	sender.Send <- data
+	log.Println("Sent to sender")
 
+	// Send to receiver
 	hub.SendToUser(wsMsg.To, data)
 
+	// Create notification if receiver is offline
 	if !hub.IsUserOnline(wsMsg.To) {
+		log.Printf("User %d is offline, creating notification", wsMsg.To)
 		fromUserID := int(sender.UserID)
 		db.CreateNotification(database, int(wsMsg.To), models.NotificationTypeNewMessage, &msg.ID, &fromUserID, "sent you a message")
 	}
+	
+	log.Println("handleChatMessage completed")
 }
 
 func handleTyping(sender *Client, hub *Hub, wsMsg WSMessage) {

@@ -57,6 +57,8 @@ func NewServer(db *sql.DB) *Server {
     mux.HandleFunc("/api/notifications", s.handleNotificationRoutes)
     mux.HandleFunc("/api/notifications/", s.handleNotificationRoutes)
     mux.HandleFunc("/ws", s.HandleWebSocket(hub))
+    mux.HandleFunc("/api/me/friends", s.handleGetFriends)
+    mux.HandleFunc("/api/check-mutual", s.handleCheckMutual)
 
     // add posts, profiles, feed, bla bla
 

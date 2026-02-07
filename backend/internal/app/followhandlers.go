@@ -1,6 +1,7 @@
 package app
 
 import (
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -328,4 +329,82 @@ func (s *Server) handleGetFollowCounts(w http.ResponseWriter, r *http.Request) {
 		"followers": followerCount,
 		"following": followingCount,
 	})
+}
+
+// handleGetFriends returns users who mutually follow each other
+func (s *Server) handleGetFriends(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	user := CurrentUser(r.Context())
+	if user == nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	friends, err := db.GetMutualFriends(s.DB, int(user.ID))
+	if err != nil {
+		log.Println("GetMutualFriends error:", err)
+		writeError(w, http.StatusInternalServerError, "failed to get friends")
+		return
+	}
+
+	if friends == nil {
+		friends = []models.User{}
+	}
+
+	var result []map[string]any
+	for _, f := range friends {
+		result = append(result, map[string]any{
+			"id":         f.ID,
+			"uuid":       f.UUID,
+			"full_name":  f.FullName,
+			"nickname":   f.Nickname,
+			"avatar_url": f.AvatarURL,
+		})
+	}
+
+	if result == nil {
+		result = []map[string]any{}
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
+// handleCheckMutual checks if current user and target user are mutual friends
+func (s *Server) handleCheckMutual(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	user := CurrentUser(r.Context())
+	if user == nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	// Get user ID from query param
+	targetID := r.URL.Query().Get("user_id")
+	if targetID == "" {
+		writeError(w, http.StatusBadRequest, "user_id required")
+		return
+	}
+
+	id, err := strconv.Atoi(targetID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid user_id")
+		return
+	}
+
+	isMutual, err := db.AreMutualFriends(s.DB, int(user.ID), id)
+	if err != nil {
+		log.Println("AreMutualFriends error:", err)
+		writeError(w, http.StatusInternalServerError, "failed to check mutual status")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]bool{"is_mutual": isMutual})
 }

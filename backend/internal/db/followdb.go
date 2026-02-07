@@ -249,3 +249,64 @@ func IsFollowing(db *sql.DB, followerID int, followingID int) (bool, error) {
     }
     return true, nil
 }
+
+// AreMutualFriends returns true if both users follow each other with status='accepted'
+func AreMutualFriends(db *sql.DB, userID1 int, userID2 int) (bool, error) {
+	stmt := `
+		SELECT COUNT(*)
+		FROM followers f1
+		JOIN followers f2 ON f1.follower_id = f2.following_id AND f1.following_id = f2.follower_id
+		WHERE f1.follower_id = ? AND f1.following_id = ?
+		AND f1.status = 'accepted' AND f2.status = 'accepted'
+	`
+
+	var count int
+	err := db.QueryRow(stmt, userID1, userID2).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+// GetMutualFriends returns list of users who mutually follow each other with the given user
+func GetMutualFriends(db *sql.DB, userID int) ([]models.User, error) {
+	stmt := `
+		SELECT u.id, u.uuid, u.email, u.full_name, u.nickname, u.avatar_url, u.is_private
+		FROM users u
+		WHERE u.id IN (
+			SELECT f1.following_id
+			FROM followers f1
+			JOIN followers f2 ON f1.follower_id = f2.following_id AND f1.following_id = f2.follower_id
+			WHERE f1.follower_id = ?
+			AND f1.status = 'accepted' AND f2.status = 'accepted'
+		)
+		ORDER BY u.full_name ASC
+	`
+
+	rows, err := db.Query(stmt, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []models.User
+
+	for rows.Next() {
+		var u models.User
+		err := rows.Scan(
+			&u.ID,
+			&u.UUID,
+			&u.Email,
+			&u.FullName,
+			&u.Nickname,
+			&u.AvatarURL,
+			&u.IsPrivate,
+		)
+		if err != nil {
+			return nil, err
+		}
+		users = append(users, u)
+	}
+
+	return users, rows.Err()
+}
