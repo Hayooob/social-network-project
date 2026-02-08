@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"social-network/internal/db"
+	"social-network/internal/models"
 )
 
 // helpers:
@@ -431,11 +432,10 @@ func (s *Server) CreatePost(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, post)
 }
 
-// GetFeed handles GET /api/feed - returns the public feed
+// GetFeed handles GET /api/feed - returns the personalized feed for logged-in users
 func (s *Server) GetFeed(w http.ResponseWriter, r *http.Request) {
 	log.Println("=== GetFeed called ===")
 	log.Println("Method:", r.Method)
-	log.Println("DB is nil?", s.DB == nil)
 
 	if r.Method != http.MethodGet {
 		log.Println("Method not allowed")
@@ -443,12 +443,29 @@ func (s *Server) GetFeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Println("Calling GetPublicFeed...")
-	posts, err := db.GetPublicFeed(s.DB, 50)
+	user := CurrentUser(r.Context())
+
+	var posts []models.Post
+	var err error
+
+	if user != nil {
+		// Logged in: show personalized feed
+		log.Println("Calling GetPersonalizedFeed for user:", user.ID)
+		posts, err = db.GetPersonalizedFeed(s.DB, int(user.ID), 50)
+	} else {
+		// Not logged in: show only public posts from public users
+		log.Println("Calling GetPublicFeed (no user)")
+		posts, err = db.GetPublicFeed(s.DB, 50)
+	}
+
 	if err != nil {
-		log.Println("GetPublicFeed ERROR:", err)
+		log.Println("GetFeed ERROR:", err)
 		writeError(w, http.StatusInternalServerError, "failed to fetch feed")
 		return
+	}
+
+	if posts == nil {
+		posts = []models.Post{}
 	}
 
 	log.Println("Found", len(posts), "posts")
@@ -514,4 +531,60 @@ func (s *Server) GetSuggestedUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, suggestions)
+}
+
+// SearchUsers handles GET /api/users/search?q=searchterm
+func (s *Server) SearchUsers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	user := CurrentUser(r.Context())
+	if user == nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	query := r.URL.Query().Get("q")
+	if query == "" {
+		writeJSON(w, http.StatusOK, []any{})
+		return
+	}
+
+	// Minimum 1 character to search
+	if len(query) < 1 {
+		writeJSON(w, http.StatusOK, []any{})
+		return
+	}
+
+	users, err := db.SearchUsers(s.DB, query, int(user.ID), 20)
+	if err != nil {
+		log.Println("SearchUsers error:", err)
+		writeError(w, http.StatusInternalServerError, "failed to search users")
+		return
+	}
+
+	if users == nil {
+		users = []models.User{}
+	}
+
+	// Return safe user data (no email for privacy)
+	var results []map[string]any
+	for _, u := range users {
+		results = append(results, map[string]any{
+			"id":         u.ID,
+			"uuid":       u.UUID,
+			"full_name":  u.FullName,
+			"nickname":   u.Nickname,
+			"avatar_url": u.AvatarURL,
+			"is_private": u.IsPrivate,
+		})
+	}
+
+	if results == nil {
+		results = []map[string]any{}
+	}
+
+	writeJSON(w, http.StatusOK, results)
 }
