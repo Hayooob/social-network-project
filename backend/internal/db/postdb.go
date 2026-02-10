@@ -122,14 +122,18 @@ WHERE p.id = ?
 func GetPublicFeed(db *sql.DB, limit int) ([]models.Post, error) {
 	query := `
 		SELECT p.id, p.user_id, p.content, p.privacy, p.created_at,
-		       u.full_name as author_name,COALESCE(pi.image_path, '') AS image_path
-		FROM posts p
-		JOIN users u ON p.user_id = u.id
-		LEFT JOIN post_images pi ON pi.post_id = p.id
-		WHERE p.privacy = 'public'
-		  AND u.is_private = 0
-		ORDER BY p.created_at DESC
-		LIMIT ?
+       u.full_name as author_name,
+       COALESCE(pi.image_path, '') AS image_path,
+       (SELECT COUNT(1) FROM post_likes pl WHERE pl.post_id = p.id) AS like_count,
+       (SELECT COUNT(1) FROM post_comments pc WHERE pc.post_id = p.id) AS comment_count,
+       0 AS liked_by_me
+FROM posts p
+JOIN users u ON p.user_id = u.id
+LEFT JOIN post_images pi ON pi.post_id = p.id
+WHERE p.privacy = 'public'
+  AND u.is_private = 0
+ORDER BY p.created_at DESC
+LIMIT ?
 	`
 
 	rows, err := db.Query(query, limit)
@@ -148,12 +152,23 @@ func GetPublicFeed(db *sql.DB, limit int) ([]models.Post, error) {
 // - your own posts (all privacy values)
 func GetPersonalizedFeed(db *sql.DB, userID int, limit int) ([]models.Post, error) {
 	query := `
-		SELECT DISTINCT p.id, p.user_id, p.content, p.privacy, p.created_at,
-		       u.full_name as author_name, COALESCE(pi.image_path, '') AS image_path
+		SELECT DISTINCT
+			p.id, p.user_id, p.content, p.privacy, p.created_at,
+			u.full_name AS author_name,
+			COALESCE(pi.image_path, '') AS image_path,
+			(SELECT COUNT(1) FROM post_likes pl WHERE pl.post_id = p.id) AS like_count,
+			(SELECT COUNT(1) FROM post_comments pc WHERE pc.post_id = p.id) AS comment_count,
+			CASE WHEN EXISTS(
+				SELECT 1 FROM post_likes pl2
+				WHERE pl2.post_id = p.id AND pl2.user_id = ?
+			) THEN 1 ELSE 0 END AS liked_by_me
 		FROM posts p
 		JOIN users u ON p.user_id = u.id
 		LEFT JOIN post_images pi ON pi.post_id = p.id
-		LEFT JOIN followers f ON f.following_id = p.user_id AND f.follower_id = ? AND f.status = 'accepted'
+		LEFT JOIN followers f
+			ON f.following_id = p.user_id
+			AND f.follower_id = ?
+			AND f.status = 'accepted'
 		WHERE
 			(p.privacy = 'public' AND u.is_private = 0)
 			OR (f.id IS NOT NULL AND p.privacy IN ('public', 'almost-private'))
@@ -165,8 +180,7 @@ func GetPersonalizedFeed(db *sql.DB, userID int, limit int) ([]models.Post, erro
 		ORDER BY p.created_at DESC
 		LIMIT ?
 	`
-
-	rows, err := db.Query(query, userID, userID, userID, limit)
+	rows, err := db.Query(query, userID, userID, userID, userID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -178,15 +192,19 @@ func GetPersonalizedFeed(db *sql.DB, userID int, limit int) ([]models.Post, erro
 // GetPostsByUserID retrieves all posts by a specific user, ordered by newest first
 func GetPostsByUserID(db *sql.DB, userID int) ([]models.Post, error) {
 	query := `
-		SELECT p.id, p.user_id, p.content, p.privacy, p.created_at,
-		       u.full_name as author_name,COALESCE(pi.image_path, '') AS image_path
+		SELECT
+			p.id, p.user_id, p.content, p.privacy, p.created_at,
+			u.full_name AS author_name,
+			COALESCE(pi.image_path, '') AS image_path,
+			(SELECT COUNT(1) FROM post_likes pl WHERE pl.post_id = p.id) AS like_count,
+			(SELECT COUNT(1) FROM post_comments pc WHERE pc.post_id = p.id) AS comment_count,
+			0 AS liked_by_me
 		FROM posts p
 		JOIN users u ON p.user_id = u.id
 		LEFT JOIN post_images pi ON pi.post_id = p.id
 		WHERE p.user_id = ?
 		ORDER BY p.created_at DESC
 	`
-
 	rows, err := db.Query(query, userID)
 	if err != nil {
 		return nil, err
@@ -203,14 +221,17 @@ func scanPosts(rows *sql.Rows) ([]models.Post, error) {
 	for rows.Next() {
 		var post models.Post
 		err := rows.Scan(
-			&post.ID,
-			&post.UserID,
-			&post.Content,
-			&post.Privacy,
-			&post.CreatedAt,
-			&post.AuthorName,
-			&post.ImagePath,
-		)
+    &post.ID,
+    &post.UserID,
+    &post.Content,
+    &post.Privacy,
+    &post.CreatedAt,
+    &post.AuthorName,
+    &post.ImagePath,
+    &post.LikeCount,
+    &post.CommentCount,
+    &post.LikedByMe,
+)
 		if err != nil {
 			return nil, err
 		}
@@ -228,20 +249,24 @@ func scanPosts(rows *sql.Rows) ([]models.Post, error) {
 // - If includeAlmost is true, it includes privacy='almost-private' in addition to public.
 // - It never includes privacy='private'. (Use GetPostsByUserVisibleForViewer for private allow-lists.)
 func GetPostsByUserVisible(db *sql.DB, userID int, includeAlmost bool) ([]models.Post, error) {
-	query := `
-		SELECT p.id, p.user_id, p.content, p.privacy, p.created_at,
-		       u.full_name as author_name, COALESCE(pi.image_path, '') AS image_path
-		FROM posts p
-		JOIN users u ON p.user_id = u.id
-		LEFT JOIN post_images pi ON pi.post_id = p.id
-		WHERE p.user_id = ?
-		  AND (
-			p.privacy = 'public'
-			OR (? = 1 AND p.privacy = 'almost-private')
-		  )
-		ORDER BY p.created_at DESC
-	`
-
+query := `
+	SELECT
+		p.id, p.user_id, p.content, p.privacy, p.created_at,
+		u.full_name AS author_name,
+		COALESCE(pi.image_path, '') AS image_path,
+		(SELECT COUNT(1) FROM post_likes pl WHERE pl.post_id = p.id) AS like_count,
+		(SELECT COUNT(1) FROM post_comments pc WHERE pc.post_id = p.id) AS comment_count,
+		0 AS liked_by_me
+	FROM posts p
+	JOIN users u ON p.user_id = u.id
+	LEFT JOIN post_images pi ON pi.post_id = p.id
+	WHERE p.user_id = ?
+	  AND (
+		p.privacy = 'public'
+		OR (? = 1 AND p.privacy = 'almost-private')
+	  )
+	ORDER BY p.created_at DESC
+`
 	flag := 0
 	if includeAlmost {
 		flag = 1
@@ -270,25 +295,33 @@ func GetPostsByUserVisibleForViewer(db *sql.DB, userID int, viewerID int, includ
 		flag = 1
 	}
 
-	query := `
-		SELECT p.id, p.user_id, p.content, p.privacy, p.created_at,
-		       u.full_name as author_name, COALESCE(pi.image_path, '') AS image_path
-		FROM posts p
-		JOIN users u ON p.user_id = u.id
-		LEFT JOIN post_images pi ON pi.post_id = p.id
-		WHERE p.user_id = ?
-		  AND (
-			p.privacy = 'public'
-			OR (? = 1 AND p.privacy = 'almost-private')
-			OR (p.privacy = 'private' AND EXISTS(
-				SELECT 1 FROM post_allowed_viewers pav
-				WHERE pav.post_id = p.id AND pav.user_id = ?
-			))
-		  )
-		ORDER BY p.created_at DESC
-	`
+query := `
+	SELECT
+		p.id, p.user_id, p.content, p.privacy, p.created_at,
+		u.full_name AS author_name,
+		COALESCE(pi.image_path, '') AS image_path,
+		(SELECT COUNT(1) FROM post_likes pl WHERE pl.post_id = p.id) AS like_count,
+		(SELECT COUNT(1) FROM post_comments pc WHERE pc.post_id = p.id) AS comment_count,
+		CASE WHEN EXISTS(
+			SELECT 1 FROM post_likes pl2
+			WHERE pl2.post_id = p.id AND pl2.user_id = ?
+		) THEN 1 ELSE 0 END AS liked_by_me
+	FROM posts p
+	JOIN users u ON p.user_id = u.id
+	LEFT JOIN post_images pi ON pi.post_id = p.id
+	WHERE p.user_id = ?
+	  AND (
+		p.privacy = 'public'
+		OR (? = 1 AND p.privacy = 'almost-private')
+		OR (p.privacy = 'private' AND EXISTS(
+			SELECT 1 FROM post_allowed_viewers pav
+			WHERE pav.post_id = p.id AND pav.user_id = ?
+		))
+	  )
+	ORDER BY p.created_at DESC
+`
 
-	rows, err := db.Query(query, userID, flag, viewerID)
+rows, err := db.Query(query, viewerID, userID, flag, viewerID)
 	if err != nil {
 		return nil, err
 	}

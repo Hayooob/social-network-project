@@ -341,7 +341,12 @@ func (s *Server) handleGetUserProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Public profile OR follower => show profile + visible posts (public + almost-private)
-	posts, err := db.GetPostsByUserVisible(s.DB, int(targetUser.ID), isFollowing)
+posts, err := db.GetPostsByUserVisibleForViewer(
+    s.DB,
+    int(targetUser.ID),     // whose profile
+    int(currentUser.ID),    // viewer
+    isFollowing,            // includeAlmost
+)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to fetch posts")
 		return
@@ -548,7 +553,7 @@ func (s *Server) GetMyPosts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	posts, err := db.GetPostsByUserID(s.DB, int(user.ID))
+posts, err := db.GetPostsByUserVisibleForViewer(s.DB, int(user.ID), int(user.ID), true)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to fetch posts")
 		return

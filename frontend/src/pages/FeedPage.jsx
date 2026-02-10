@@ -4,6 +4,8 @@ import { getFeed, createPost, listComments, createComment, toggleLike } from '..
 import { getSuggestedUsers } from '../api/auth';
 import { followUser, getFollowCounts } from '../api/followers';
 import { useAuth } from '../VerifyAuth';
+import { useLocation } from "react-router-dom";
+
 
 export default function FeedPage() {
   const { user } = useAuth();
@@ -18,7 +20,7 @@ const [commentsByPostId, setCommentsByPostId] = useState({});
 const [commentDraftByPostId, setCommentDraftByPostId] = useState({});
 const [likesByPostId, setLikesByPostId] = useState({});
 const [imageFile, setImageFile] = useState(null);
-
+const location = useLocation();
 
   const fetchData = async () => {
     setLoading(true);
@@ -38,9 +40,8 @@ const [imageFile, setImageFile] = useState(null);
     }
   };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+useEffect(() => { fetchData(); }, [location.key]);
+
 
   const handlePostSubmit = async (e) => {
     e.preventDefault();
@@ -117,14 +118,28 @@ const onSubmitComment = async (postId) => {
   const text = (commentDraftByPostId[postId] || "").trim();
   if (!text) return;
 
-  await createComment(postId, text);
-  setCommentDraftByPostId((prev) => ({ ...prev, [postId]: "" }));
-  await loadComments(postId);
+  try {
+    await createComment(postId, text);
+    setCommentDraftByPostId((prev) => ({ ...prev, [postId]: "" }));
+    await loadComments(postId);
+  } catch (e) {
+    console.error("createComment error:", e);
+    alert(e.message || "Failed to create comment");
+  }
 };
 
+
 const onToggleLike = async (postId) => {
-  const res = await toggleLike(postId);
-  setLikesByPostId((prev) => ({ ...prev, [postId]: res }));
+  try {
+    const res = await toggleLike(postId);
+    setLikesByPostId((prev) => ({ ...prev, [postId]: res }));
+    setPosts((prev) =>
+      prev.map((p) => (p.id === postId ? { ...p, like_count: res.like_count } : p))
+    );
+  } catch (e) {
+    console.error("toggleLike error:", e);
+    alert(e.message || "Failed to like");
+  }
 };
 
   return (
