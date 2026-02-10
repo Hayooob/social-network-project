@@ -41,6 +41,7 @@ func NewServer(db *sql.DB) *Server {
 	mux.HandleFunc("/api/me", s.handleMe)
 	mux.HandleFunc("/api/me/privacy", s.handleTogglePrivacy)
 	mux.HandleFunc("/api/posts", s.CreatePost)
+	mux.HandleFunc("/api/posts/", s.handlePostRoutes)
 	mux.HandleFunc("/api/feed", s.GetFeed)
 	mux.HandleFunc("/api/me/posts", s.GetMyPosts)
 	mux.HandleFunc("/api/users/suggestions", s.GetSuggestedUsers)
@@ -60,6 +61,7 @@ func NewServer(db *sql.DB) *Server {
 	mux.HandleFunc("/ws", s.HandleWebSocket(hub))
 	mux.HandleFunc("/api/me/friends", s.handleGetFriends)
 	mux.HandleFunc("/api/check-mutual", s.handleCheckMutual)
+	mux.Handle("/uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir("uploads"))))
 
 	return s
 }
@@ -83,8 +85,10 @@ func (s *Server) CORSMiddleware(next http.Handler) http.Handler {
 		if origin == "http://localhost:5173" {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+			w.Header().Set("Vary", "Origin")
+
 		}
 
 		// Handle preflight requests directly

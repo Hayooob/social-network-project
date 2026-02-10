@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getFeed, createPost } from '../api/posts';
+import { getFeed, createPost, listComments, createComment, toggleLike } from '../api/posts';
 import { getSuggestedUsers } from '../api/auth';
 import { followUser, getFollowCounts } from '../api/followers';
 import { useAuth } from '../VerifyAuth';
@@ -13,6 +13,12 @@ export default function FeedPage() {
   const [loading, setLoading] = useState(true);
   const [content, setContent] = useState('');
   const [posting, setPosting] = useState(false);
+const [openCommentsPostId, setOpenCommentsPostId] = useState(null);
+const [commentsByPostId, setCommentsByPostId] = useState({});
+const [commentDraftByPostId, setCommentDraftByPostId] = useState({});
+const [likesByPostId, setLikesByPostId] = useState({});
+const [imageFile, setImageFile] = useState(null);
+
 
   const fetchData = async () => {
     setLoading(true);
@@ -42,7 +48,8 @@ export default function FeedPage() {
 
     setPosting(true);
     try {
-      await createPost(content.trim());
+await createPost(content.trim(), "public", imageFile);
+setImageFile(null);
       setContent('');
       fetchData();
     } catch (err) {
@@ -90,6 +97,35 @@ export default function FeedPage() {
     const classes = ['post-accent', 'post-accent-rose', 'post-accent-dark'];
     return classes[index % 3];
   };
+const loadComments = async (postId) => {
+  const data = await listComments(postId);
+  setCommentsByPostId((prev) => ({ ...prev, [postId]: data || [] }));
+};
+
+const onToggleComments = async (postId) => {
+  if (openCommentsPostId === postId) {
+    setOpenCommentsPostId(null);
+    return;
+  }
+  setOpenCommentsPostId(postId);
+  if (!commentsByPostId[postId]) {
+    await loadComments(postId);
+  }
+};
+
+const onSubmitComment = async (postId) => {
+  const text = (commentDraftByPostId[postId] || "").trim();
+  if (!text) return;
+
+  await createComment(postId, text);
+  setCommentDraftByPostId((prev) => ({ ...prev, [postId]: "" }));
+  await loadComments(postId);
+};
+
+const onToggleLike = async (postId) => {
+  const res = await toggleLike(postId);
+  setLikesByPostId((prev) => ({ ...prev, [postId]: res }));
+};
 
   return (
     <div className="main-content">
@@ -154,6 +190,14 @@ export default function FeedPage() {
                   onChange={(e) => setContent(e.target.value)}
                   disabled={posting}
                 />
+                <input
+  type="file"
+  accept="image/*"
+  disabled={posting}
+  onChange={(e) => setImageFile(e.target.files?.[0] || null)}
+  style={{ marginTop: 12 }}
+/>
+
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
                   <button type="submit" className="btn btn-primary" disabled={posting}>
                     {posting ? 'Posting...' : 'Post'}
@@ -198,11 +242,70 @@ export default function FeedPage() {
                     <span className="post-time">{formatDate(post.created_at)}</span>
                   </div>
                   <p className="post-text">{post.content}</p>
-                  <div className="post-actions">
-                    <span className="post-action">♥ Like</span>
-                    <span className="post-action">↩ Reply</span>
-                    <span className="post-action">⋯</span>
-                  </div>
+                  {post.image_path && (
+  <div style={{ marginTop: 12 }}>
+    <img
+      src={`http://localhost:8080${post.image_path}`}
+      alt="post"
+      style={{ maxWidth: "100%", borderRadius: 12 }}
+    />
+  </div>
+)}
+
+                <div className="post-actions">
+  <button
+    type="button"
+    className="post-action"
+    onClick={() => onToggleLike(post.id)}
+  >
+    ♥ Like {likesByPostId[post.id]?.like_count ?? post.like_count ?? 0}
+  </button>
+
+  <button
+    type="button"
+    className="post-action"
+    onClick={() => onToggleComments(post.id)}
+  >
+    ↩ Reply {commentsByPostId[post.id]?.length ? `(${commentsByPostId[post.id].length})` : ''}
+  </button>
+
+  <span className="post-action">⋯</span>
+</div>
+
+{openCommentsPostId === post.id && (
+  <div style={{ marginTop: 12, borderTop: '1px solid rgba(0,0,0,0.08)', paddingTop: 12 }}>
+    <div style={{ display: 'grid', gap: 10, marginBottom: 10 }}>
+      {(commentsByPostId[post.id] || []).map((c) => (
+        <div key={c.id} style={{ fontSize: 14 }}>
+          <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 2 }}>
+            {c.author_name || c.username || 'Unknown'} •{' '}
+            {c.created_at ? new Date(c.created_at).toLocaleString() : ''}
+          </div>
+          <div>{c.content}</div>
+        </div>
+      ))}
+
+      {(commentsByPostId[post.id] || []).length === 0 && (
+        <div style={{ fontSize: 13, opacity: 0.6 }}>No comments yet.</div>
+      )}
+    </div>
+
+    <div style={{ display: 'flex', gap: 8 }}>
+      <input
+        className="form-input"
+        placeholder="Write a comment…"
+        value={commentDraftByPostId[post.id] || ''}
+        onChange={(e) =>
+          setCommentDraftByPostId((prev) => ({ ...prev, [post.id]: e.target.value }))
+        }
+      />
+      <button className="btn btn-primary" type="button" onClick={() => onSubmitComment(post.id)}>
+        Send ↗
+      </button>
+    </div>
+  </div>
+)}
+
                 </div>
               </div>
             ))

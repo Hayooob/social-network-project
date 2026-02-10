@@ -12,4 +12,6 @@ type Post struct {
 	
 	// Optional fields for joined data
 	AuthorName string `json:"author_name,omitempty"`
+	ImagePath string `json:"image_path,omitempty"`
+
 }

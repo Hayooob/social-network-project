@@ -2,9 +2,14 @@ package app
 
 import (
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
+	"time"
 
 	"social-network/internal/db"
 	"social-network/internal/models"
@@ -336,7 +341,7 @@ func (s *Server) handleGetUserProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Public profile OR follower => show profile + visible posts (public + almost-private)
-	posts, err := db.GetPostsByUserVisible(s.DB, int(targetUser.ID), true)
+	posts, err := db.GetPostsByUserVisible(s.DB, int(targetUser.ID), isFollowing)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to fetch posts")
 		return
@@ -384,47 +389,105 @@ func containsSlash(s string) bool {
 
 // CreatePost handles POST /api/posts - creates a new post for the logged-in user
 func (s *Server) CreatePost(w http.ResponseWriter, r *http.Request) {
-	log.Println("=== CreatePost called ===")
-	log.Println("Method:", r.Method)
-
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
 	user := CurrentUser(r.Context())
-	log.Println("Current user:", user)
 	if user == nil {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
-	var req struct {
-		Content string `json:"content"`
-		Privacy string `json:"privacy"`
+	var content string
+	privacy := "public"
+	imagePath := ""
+	allowedViewers := []int{}
+
+	ct := r.Header.Get("Content-Type")
+
+	if strings.HasPrefix(ct, "multipart/form-data") {
+		if err := r.ParseMultipartForm(10 << 20); err != nil { // 10MB
+			writeError(w, http.StatusBadRequest, "invalid multipart form")
+			return
+		}
+
+		content = strings.TrimSpace(r.FormValue("content"))
+		if v := strings.TrimSpace(r.FormValue("privacy")); v != "" {
+			privacy = v
+		}
+
+		if av := strings.TrimSpace(r.FormValue("allowed_viewers")); av != "" {
+			_ = json.Unmarshal([]byte(av), &allowedViewers)
+		}
+
+		// image file: field name MUST be "image"
+		file, header, err := r.FormFile("image")
+		if err == nil && file != nil && header != nil {
+			defer file.Close()
+
+			_ = os.MkdirAll("uploads", 0755)
+
+			ext := filepath.Ext(header.Filename)
+			if ext == "" {
+				ext = ".png"
+			}
+
+			filename := strconv.FormatInt(time.Now().UnixNano(), 10) + ext
+			dstPath := filepath.Join("uploads", filename)
+
+			dst, err := os.Create(dstPath)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "failed to save image")
+				return
+			}
+			defer dst.Close()
+
+			if _, err := io.Copy(dst, file); err != nil {
+				writeError(w, http.StatusInternalServerError, "failed to save image")
+				return
+			}
+
+			imagePath = "/uploads/" + filename
+		}
+
+	} else {
+		var req struct {
+			Content        string `json:"content"`
+			Privacy        string `json:"privacy"`
+			ImagePath      string `json:"image_path,omitempty"`
+			AllowedViewers []int  `json:"allowed_viewers,omitempty"`
+		}
+
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+
+		content = strings.TrimSpace(req.Content)
+		if strings.TrimSpace(req.Privacy) != "" {
+			privacy = req.Privacy
+		}
+		imagePath = req.ImagePath
+		allowedViewers = req.AllowedViewers
 	}
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
+	if content == "" {
+		writeError(w, http.StatusBadRequest, "content is required")
 		return
 	}
 
-	if req.Content == "" {
-		writeError(w, http.StatusBadRequest, "content cannot be empty")
-		return
-	}
-
-	if req.Privacy == "" {
-		req.Privacy = "public"
-	}
-
-	if req.Privacy != "public" && req.Privacy != "private" && req.Privacy != "almost-private" {
-		writeError(w, http.StatusBadRequest, "invalid privacy setting")
-		return
-	}
-
-	post, err := db.InsertPost(s.DB, int(user.ID), req.Content, req.Privacy)
+	post, err := db.InsertPostWithExtras(
+		s.DB,
+		int(user.ID),
+		content,
+		privacy,
+		imagePath,
+		allowedViewers,
+	)
 	if err != nil {
+		log.Println("CreatePost error:", err)
 		writeError(w, http.StatusInternalServerError, "failed to create post")
 		return
 	}
@@ -587,4 +650,207 @@ func (s *Server) SearchUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, results)
+}
+
+// 3 post sroutes
+// /api/posts/{id}/comments  (GET, POST)
+// /api/posts/{id}/like      (POST)
+
+type commentCreateRequest struct {
+	Content   string `json:"content"`
+	ImagePath string `json:"image_path,omitempty"`
+}
+
+type commentResponse struct {
+	ID         int    `json:"id"`
+	PostID     int    `json:"post_id"`
+	UserID     int64  `json:"user_id"`
+	AuthorName string `json:"author_name"`
+	Content    string `json:"content"`
+	ImagePath  string `json:"image_path"`
+	CreatedAt  string `json:"created_at"`
+}
+
+func (s *Server) handlePostRoutes(w http.ResponseWriter, r *http.Request) {
+	// /api/posts/{id}/comments
+	// /api/posts/{id}/like
+	rest := strings.TrimPrefix(r.URL.Path, "/api/posts/")
+	rest = strings.Trim(rest, "/")
+	parts := strings.Split(rest, "/")
+
+	if len(parts) < 2 {
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+
+	postID, err := strconv.Atoi(parts[0])
+	if err != nil || postID <= 0 {
+		writeError(w, http.StatusBadRequest, "invalid post id")
+		return
+	}
+
+	switch parts[1] {
+	case "comments":
+		s.handlePostComments(w, r, postID)
+		return
+	case "like":
+		s.handlePostLike(w, r, postID)
+		return
+	default:
+		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+}
+
+func (s *Server) handlePostComments(w http.ResponseWriter, r *http.Request, postID int) {
+	user := CurrentUser(r.Context())
+	if user == nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		rows, err := s.DB.Query(`
+			SELECT c.id, c.post_id, c.user_id, u.full_name, c.content, COALESCE(c.image_path, ''), c.created_at
+			FROM post_comments c
+			JOIN users u ON u.id = c.user_id
+			WHERE c.post_id = ?
+			ORDER BY c.created_at ASC
+		`, postID)
+		if err != nil {
+			log.Println("list comments query error:", err)
+			writeError(w, http.StatusInternalServerError, "failed to fetch comments")
+			return
+		}
+		defer rows.Close()
+
+		out := []commentResponse{}
+		for rows.Next() {
+			var c commentResponse
+			if err := rows.Scan(&c.ID, &c.PostID, &c.UserID, &c.AuthorName, &c.Content, &c.ImagePath, &c.CreatedAt); err != nil {
+				log.Println("list comments scan error:", err)
+				writeError(w, http.StatusInternalServerError, "failed to fetch comments")
+				return
+			}
+			out = append(out, c)
+		}
+		writeJSON(w, http.StatusOK, out)
+		return
+
+	case http.MethodPost:
+		var req commentCreateRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		if strings.TrimSpace(req.Content) == "" {
+			writeError(w, http.StatusBadRequest, "content is required")
+			return
+		}
+
+		res, err := s.DB.Exec(`
+			INSERT INTO post_comments (post_id, user_id, content, image_path)
+			VALUES (?, ?, ?, ?)
+		`, postID, user.ID, req.Content, req.ImagePath)
+		if err != nil {
+			log.Println("create comment insert error:", err)
+			writeError(w, http.StatusInternalServerError, "failed to create comment")
+			return
+		}
+
+		newID, _ := res.LastInsertId()
+
+		// Return the created comment
+		var c commentResponse
+		err = s.DB.QueryRow(`
+			SELECT c.id, c.post_id, c.user_id, u.full_name, c.content, COALESCE(c.image_path, ''), c.created_at
+			FROM post_comments c
+			JOIN users u ON u.id = c.user_id
+			WHERE c.id = ?
+		`, newID).Scan(&c.ID, &c.PostID, &c.UserID, &c.AuthorName, &c.Content, &c.ImagePath, &c.CreatedAt)
+
+		if err != nil {
+			log.Println("create comment fetch error:", err)
+			// still ok to return success without full record
+			writeJSON(w, http.StatusCreated, map[string]any{
+				"id": newID,
+			})
+			return
+		}
+
+		writeJSON(w, http.StatusCreated, c)
+		return
+
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+}
+
+func (s *Server) handlePostLike(w http.ResponseWriter, r *http.Request, postID int) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	user := CurrentUser(r.Context())
+	if user == nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	// check if like exists
+	var existing int
+	if err := s.DB.QueryRow(`
+		SELECT COUNT(*)
+		FROM post_likes
+		WHERE post_id = ? AND user_id = ?
+	`, postID, user.ID).Scan(&existing); err != nil {
+		log.Println("like check error:", err)
+		writeError(w, http.StatusInternalServerError, "failed to toggle like")
+		return
+	}
+
+	liked := false
+	if existing > 0 {
+		_, err := s.DB.Exec(`
+			DELETE FROM post_likes
+			WHERE post_id = ? AND user_id = ?
+		`, postID, user.ID)
+		if err != nil {
+			log.Println("unlike error:", err)
+			writeError(w, http.StatusInternalServerError, "failed to toggle like")
+			return
+		}
+		liked = false
+	} else {
+		_, err := s.DB.Exec(`
+			INSERT INTO post_likes (post_id, user_id)
+			VALUES (?, ?)
+		`, postID, user.ID)
+		if err != nil {
+			log.Println("like insert error:", err)
+			writeError(w, http.StatusInternalServerError, "failed to toggle like")
+			return
+		}
+		liked = true
+	}
+
+	// return updated count
+	var likeCount int
+	if err := s.DB.QueryRow(`
+		SELECT COUNT(*)
+		FROM post_likes
+		WHERE post_id = ?
+	`, postID).Scan(&likeCount); err != nil {
+		log.Println("like count error:", err)
+		writeError(w, http.StatusInternalServerError, "failed to toggle like")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"liked":      liked,
+		"like_count": likeCount,
+	})
 }

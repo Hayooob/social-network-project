@@ -15,6 +15,18 @@ export default function PostCard({ post }) {
       <div className="font-bold">{post.author_name || 'Unknown'}</div>
       <div className="text-sm text-gray-500">{formatDate(post.created_at)}</div>
       <p className="mt-2">{post.content}</p>
+    {post.image_path && (
+  <img
+    src={
+      post.image_path.startsWith("http")
+        ? post.image_path
+        : `http://localhost:8080${post.image_path}`
+    }
+    alt="post"
+    style={{ marginTop: 12, maxWidth: "100%", borderRadius: 12 }}
+  />
+)}
+
     </div>
   );
 }
