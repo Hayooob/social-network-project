@@ -208,7 +208,15 @@ export default function Layout({ children }) {
                   </span>
                 )}
               </Link>
+              <Link to="/groups" className={`nav-link ${isActive('/groups') ? 'active' : ''}`}>
+                Groups
+                <span className="nav-link-arrow">↗</span>
+              </Link>
 
+              <Link to="/events" className={`nav-link ${isActive('/events') ? 'active' : ''}`}>
+                Events
+                <span className="nav-link-arrow">↗</span>
+              </Link>
               <button onClick={handleLogout} className="btn btn-secondary">
                 Logout
               </button>

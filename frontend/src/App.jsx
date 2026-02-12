@@ -15,6 +15,14 @@ import UserProfilePage from "./pages/UserProfilePage";
 import MessagesPage from "./pages/MessagesPage";
 import NotificationsPage from "./pages/NotificationsPage";
 
+// Stage 7
+import GroupsPage from "./pages/GroupsPage";
+import GroupDetailPage from "./pages/GroupDetailPage";
+import CreateGroupPage from "./pages/CreateGroupPage";
+import EventsPage from "./pages/EventsPage";
+import EventDetailPage from "./pages/EventDetailPage";
+import CreateEventPage from "./pages/CreateEventPage";
+
 export default function App() {
   return (
     <Layout>
@@ -89,6 +97,56 @@ export default function App() {
           element={
             <Privateroute>
               <NotificationsPage />
+            </Privateroute>
+          }
+        />
+        {/* Stage 7 routes */}
+        <Route
+          path="/groups"
+          element={
+            <Privateroute>
+              <GroupsPage />
+            </Privateroute>
+          }
+        />
+        <Route
+          path="/groups/create"
+          element={
+            <Privateroute>
+              <CreateGroupPage />
+            </Privateroute>
+          }
+        />
+        <Route
+          path="/groups/:id"
+          element={
+            <Privateroute>
+              <GroupDetailPage />
+            </Privateroute>
+          }
+        />
+
+        <Route
+          path="/events"
+          element={
+            <Privateroute>
+              <EventsPage />
+            </Privateroute>
+          }
+        />
+        <Route
+          path="/events/create"
+          element={
+            <Privateroute>
+              <CreateEventPage />
+            </Privateroute>
+          }
+        />
+        <Route
+          path="/events/:id"
+          element={
+            <Privateroute>
+              <EventDetailPage />
             </Privateroute>
           }
         />
