@@ -63,6 +63,12 @@ func NewServer(db *sql.DB) *Server {
 	mux.HandleFunc("/api/check-mutual", s.handleCheckMutual)
 	mux.Handle("/uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir("uploads"))))
 
+	// Stage 7: Groups & Events
+	mux.HandleFunc("/api/groups", s.handleGroups)
+	mux.HandleFunc("/api/groups/", s.handleGroupRoutes)
+	mux.HandleFunc("/api/events", s.handleEvents)
+	mux.HandleFunc("/api/events/", s.handleEventRoutes)
+
 	return s
 }
 
@@ -101,3 +107,4 @@ func (s *Server) CORSMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
