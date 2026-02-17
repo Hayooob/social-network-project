@@ -1,23 +1,19 @@
 import { get, post } from "./ftchclient";
 
-export function createEvent(payload) {
-  return post("/api/events", payload);
-}
-
-export async function getUpcomingEvents() {
-  const data = await get("/api/events");
+export async function getGroupEvents(groupId) {
+  const data = await get(`/api/groups/${groupId}/events`);
   return data || [];
 }
 
-export function getEventDetails(id) {
-  return get(`/api/events/${id}`);
+export function createGroupEvent(groupId, payload) {
+  return post(`/api/groups/${groupId}/events`, payload);
 }
 
-export function respondToEvent(id, response) {
-  return post(`/api/events/${id}/respond`, { response });
+export function respondToGroupEvent(groupId, eventId, response) {
+  return post(`/api/groups/${groupId}/events/${eventId}/respond`, { response });
 }
 
-export async function getEventResponses(id) {
-  const data = await get(`/api/events/${id}/responses`);
+export async function getGroupEventResponses(groupId, eventId) {
+  const data = await get(`/api/groups/${groupId}/events/${eventId}/responses`);
   return data || [];
 }

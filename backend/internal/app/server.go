@@ -63,11 +63,12 @@ func NewServer(db *sql.DB) *Server {
 	mux.HandleFunc("/api/check-mutual", s.handleCheckMutual)
 	mux.Handle("/uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir("uploads"))))
 
-	// Stage 7: Groups & Events
+	
+	// Stage 7: Groups
 	mux.HandleFunc("/api/groups", s.handleGroups)
+	mux.HandleFunc("/api/groups/invitations", s.handleGroupInvitations)
+	mux.HandleFunc("/api/groups/invitations/", s.handleGroupInvitationRoutes)
 	mux.HandleFunc("/api/groups/", s.handleGroupRoutes)
-	mux.HandleFunc("/api/events", s.handleEvents)
-	mux.HandleFunc("/api/events/", s.handleEventRoutes)
 
 	return s
 }

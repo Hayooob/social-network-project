@@ -213,10 +213,10 @@ export default function Layout({ children }) {
                 <span className="nav-link-arrow">↗</span>
               </Link>
 
-              <Link to="/events" className={`nav-link ${isActive('/events') ? 'active' : ''}`}>
+              {/* <Link to="/events" className={`nav-link ${isActive('/events') ? 'active' : ''}`}>
                 Events
                 <span className="nav-link-arrow">↗</span>
-              </Link>
+              </Link> */}
               <button onClick={handleLogout} className="btn btn-secondary">
                 Logout
               </button>

@@ -254,3 +254,84 @@ func getGroupMember(db *sql.DB, groupID int, userID int) (*models.GroupMember, e
 	}
 	return &m, nil
 }
+// GetVisibleGroups returns groups visible to the user:
+// - groups created by users they follow (accepted follows)
+// - groups they created
+// - groups they are already related to (member or invited or requested)
+func GetVisibleGroups(dbConn *sql.DB, userID int) ([]models.Group, error) {
+	query := `
+		SELECT
+			g.id, g.creator_id, g.name, g.description, g.is_private, g.created_at,
+			u.full_name AS creator_name,
+			(SELECT COUNT(1) FROM group_members gm WHERE gm.group_id = g.id AND gm.status = 'accepted') AS member_count,
+			COALESCE(gm.status, '') AS my_status,
+			COALESCE(gm.role, '') AS my_role,
+			COALESCE(gi.id, 0) AS invitation_id,
+			COALESCE(gi.status, '') AS invitation_status
+		FROM groups g
+		JOIN users u ON u.id = g.creator_id
+		LEFT JOIN group_members gm
+			ON gm.group_id = g.id AND gm.user_id = ?
+		LEFT JOIN group_invitations gi
+			ON gi.group_id = g.id AND gi.invitee_id = ? AND gi.status = 'pending'
+		WHERE
+			g.creator_id = ?
+			OR gm.user_id IS NOT NULL
+			OR gi.id IS NOT NULL
+			OR g.creator_id IN (
+				SELECT following_id FROM followers
+				WHERE follower_id = ? AND status = 'accepted'
+			)
+		ORDER BY g.created_at DESC
+	`
+
+	rows, err := dbConn.Query(query, userID, userID, userID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var groups []models.Group
+	for rows.Next() {
+		var g models.Group
+		if err := rows.Scan(
+			&g.ID,
+			&g.CreatorID,
+			&g.Name,
+			&g.Description,
+			&g.IsPrivate,
+			&g.CreatedAt,
+			&g.CreatorName,
+			&g.MemberCount,
+			&g.MyStatus,
+			&g.MyRole,
+			&g.InvitationID,
+			&g.InvitationStatus,
+		); err != nil {
+			return nil, err
+		}
+		groups = append(groups, g)
+	}
+	return groups, rows.Err()
+}
+// GetAcceptedGroupMemberIDs returns user IDs of accepted members.
+func GetAcceptedGroupMemberIDs(dbConn *sql.DB, groupID int) ([]int, error) {
+	rows, err := dbConn.Query(`
+		SELECT user_id FROM group_members
+		WHERE group_id = ? AND status = 'accepted'
+	`, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []int
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}

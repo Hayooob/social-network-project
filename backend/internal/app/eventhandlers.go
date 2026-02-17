@@ -18,9 +18,9 @@ type createEventRequest struct {
 	EventDate   string `json:"event_date"` // ISO string
 }
 
-type respondEventRequest struct {
-	Response string `json:"response"`
-}
+//type respondEventRequest struct {
+	//Response string `json:"response"`
+//}
 
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	user := CurrentUser(r.Context())

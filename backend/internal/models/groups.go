@@ -7,24 +7,29 @@ type Group struct {
 	CreatorID   int       `json:"creator_id"`
 	Name        string    `json:"name"`
 	Description string    `json:"description"`
-	IsPrivate   int       `json:"is_private"` // 0/1 for sqlite
+	IsPrivate   int       `json:"is_private"`
 	CreatedAt   time.Time `json:"created_at"`
 
-	// optional joined fields
+	// joined
 	CreatorName string `json:"creator_name,omitempty"`
 	MemberCount int    `json:"member_count,omitempty"`
-	MyStatus    string `json:"my_status,omitempty"` // pending/accepted/none
-	MyRole      string `json:"my_role,omitempty"`   // admin/member
+
+	// viewer state
+	MyStatus string `json:"my_status,omitempty"` // accepted/pending/""
+	MyRole   string `json:"my_role,omitempty"`   // admin/member/""
+
+	// invitation state (for UI: Accept/Decline)
+	InvitationID     int    `json:"invitation_id,omitempty"`     // 0 if none
+	InvitationStatus string `json:"invitation_status,omitempty"` // pending/""
 }
 
 type GroupMember struct {
 	ID       int       `json:"id"`
 	GroupID  int       `json:"group_id"`
 	UserID   int       `json:"user_id"`
-	Role     string    `json:"role"`   // admin/member
-	Status   string    `json:"status"` // pending/accepted
+	Role     string    `json:"role"`
+	Status   string    `json:"status"`
 	JoinedAt time.Time `json:"joined_at"`
 
-	// optional joined fields
 	UserName string `json:"user_name,omitempty"`
 }

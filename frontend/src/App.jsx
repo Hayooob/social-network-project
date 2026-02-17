@@ -19,9 +19,9 @@ import NotificationsPage from "./pages/NotificationsPage";
 import GroupsPage from "./pages/GroupsPage";
 import GroupDetailPage from "./pages/GroupDetailPage";
 import CreateGroupPage from "./pages/CreateGroupPage";
-import EventsPage from "./pages/EventsPage";
-import EventDetailPage from "./pages/EventDetailPage";
-import CreateEventPage from "./pages/CreateEventPage";
+//import EventsPage from "./pages/EventsPage";
+//import EventDetailPage from "./pages/EventDetailPage";
+//import CreateEventPage from "./pages/CreateEventPage";
 
 export default function App() {
   return (
@@ -126,7 +126,7 @@ export default function App() {
           }
         />
 
-        <Route
+        {/* <Route
           path="/events"
           element={
             <Privateroute>
@@ -149,7 +149,7 @@ export default function App() {
               <EventDetailPage />
             </Privateroute>
           }
-        />
+        /> */}
 
         {/* default */}
         <Route path="/" element={<Navigate to="/feed" replace />} />

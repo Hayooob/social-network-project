@@ -4,44 +4,74 @@ import { UserPlus, UserCheck, Mail, Bell } from 'lucide-react';
 
 export default function NotificationCard({ notification, onMarkRead }) {
   const getIcon = (type) => {
-    switch (type) {
-      case 'follow_request':
-        return <UserPlus size={18} color="var(--white)" />;
-      case 'follow_accept':
-        return <UserCheck size={18} color="var(--white)" />;
-      case 'new_message':
-        return <Mail size={18} color="var(--white)" />;
-      default:
-        return <Bell size={18} color="var(--white)" />;
-    }
-  };
+  switch (type) {
+    case 'follow_request':
+      return <UserPlus size={18} color="var(--white)" />;
+    case 'follow_accept':
+      return <UserCheck size={18} color="var(--white)" />;
+    case 'new_message':
+      return <Mail size={18} color="var(--white)" />;
 
-  const getMessage = (notification) => {
-    const name = notification.from_user_name || 'Someone';
-    switch (notification.type) {
-      case 'follow_request':
-        return `${name} sent you a follow request`;
-      case 'follow_accept':
-        return `${name} accepted your follow request`;
-      case 'new_message':
-        return `${name} ${notification.content || 'sent you a message'}`;
-      default:
-        return notification.content || 'New notification';
-    }
-  };
+    // Stage 7 (groups/events)
+    case 'group_invite':
+      return <UserPlus size={18} color="var(--white)" />;
+    case 'group_join_request':
+      return <UserPlus size={18} color="var(--white)" />;
+    case 'group_event_created':
+      return <Bell size={18} color="var(--white)" />;
 
-  const getLink = (notification) => {
-    switch (notification.type) {
-      case 'follow_request':
-        return '/follow-requests';
-      case 'follow_accept':
-        return notification.from_user_id ? `/users/${notification.from_user_id}` : '/followers';
-      case 'new_message':
-        return notification.from_user_id ? `/messages/${notification.from_user_id}` : '/messages';
-      default:
-        return '#';
-    }
-  };
+    default:
+      return <Bell size={18} color="var(--white)" />;
+  }
+};
+
+const getMessage = (notification) => {
+  const name = notification.from_user_name || 'Someone';
+  switch (notification.type) {
+    case 'follow_request':
+      return `${name} sent you a follow request`;
+    case 'follow_accept':
+      return `${name} accepted your follow request`;
+    case 'new_message':
+      return `${name} ${notification.content || 'sent you a message'}`;
+
+    // Stage 7
+    case 'group_invite':
+      return `${name} invited you to a group`;
+    case 'group_join_request':
+      return `${name} requested to join your group`;
+    case 'group_event_created':
+      return `${name} created a new event in your group`;
+
+    default:
+      return notification.content || 'New notification';
+  }
+};
+
+const getLink = (notification) => {
+  const ref = notification.reference_id;
+
+  switch (notification.type) {
+    case 'follow_request':
+      return '/follow-requests';
+    case 'follow_accept':
+      return notification.from_user_id ? `/users/${notification.from_user_id}` : '/followers';
+    case 'new_message':
+      return notification.from_user_id ? `/messages/${notification.from_user_id}` : '/messages';
+
+    // Stage 7 routing
+    case 'group_invite':
+      return '/groups'; // accept/decline happens there
+    case 'group_join_request':
+      return ref ? `/groups/${ref}` : '/groups'; // creator/admin sees pending requests
+    case 'group_event_created':
+      return ref ? `/groups/${ref}` : '/groups'; // goes into group -> events section
+
+    default:
+      return '#';
+  }
+};
+
 
   const formatTime = (timestamp) => {
     try {

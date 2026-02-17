@@ -10,3 +10,8 @@ export async function togglePrivacy() {
   return post(`/api/me/privacy`);
 }
 
+// GET /api/users/search?q=...
+export async function searchUsers(q) {
+  const data = await get(`/api/users/search?q=${encodeURIComponent(q)}`);
+  return data || [];
+}

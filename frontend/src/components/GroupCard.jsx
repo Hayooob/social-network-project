@@ -1,8 +1,18 @@
 import React from "react";
 import { Link } from "react-router-dom";
 
-export default function GroupCard({ group, onJoin, onLeave, busy }) {
-  const status = group?.my_status || "";
+export default function GroupCard({
+  group,
+  busy,
+  onRequest,
+  onLeave,
+  onAcceptInvite,
+  onDeclineInvite,
+}) {
+  const invited = (group?.invitation_id || 0) > 0;
+  const inviteId = group?.invitation_id || 0;
+
+  const status = group?.my_status || ""; // accepted/pending/""
   const isAccepted = status === "accepted";
   const isPending = status === "pending";
 
@@ -12,9 +22,7 @@ export default function GroupCard({ group, onJoin, onLeave, busy }) {
         <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
           <div style={{ flex: 1 }}>
             <Link to={`/groups/${group.id}`} style={{ textDecoration: "none" }}>
-              <h3 style={{ margin: 0, fontFamily: "'Cormorant Garamond', serif" }}>
-                {group.name}
-              </h3>
+              <h3 style={{ margin: 0, fontFamily: "'Cormorant Garamond', serif" }}>{group.name}</h3>
             </Link>
             <p style={{ marginTop: 6, opacity: 0.8 }}>{group.description}</p>
 
@@ -22,32 +30,54 @@ export default function GroupCard({ group, onJoin, onLeave, busy }) {
               <span>{group.member_count ?? 0} members</span>
               <span>•</span>
               <span>{group.is_private === 1 ? "Private" : "Public"}</span>
-              {status && (
+              {invited && (
                 <>
                   <span>•</span>
-                  <span>Status: {status}</span>
+                  <span style={{ fontWeight: 700 }}>Invited</span>
+                </>
+              )}
+              {isPending && !invited && (
+                <>
+                  <span>•</span>
+                  <span>Requested</span>
                 </>
               )}
             </div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            {!status && (
-              <button className="btn btn-primary" onClick={() => onJoin?.(group.id)} disabled={busy}>
-                {busy ? "Joining..." : "Join"}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            {invited && (
+              <>
+                <button className="btn btn-primary" disabled={busy} onClick={() => onAcceptInvite?.(inviteId)}>
+                  {busy ? "..." : "Accept"}
+                </button>
+                <button className="btn btn-outline btn-danger" disabled={busy} onClick={() => onDeclineInvite?.(inviteId)}>
+                  {busy ? "..." : "Decline"}
+                </button>
+              </>
+            )}
+
+            {!invited && !status && (
+              <button className="btn btn-primary" disabled={busy} onClick={() => onRequest?.(group.id)}>
+                {busy ? "..." : "Request"}
               </button>
             )}
 
-            {isPending && (
+            {!invited && isPending && (
               <button className="btn btn-secondary" disabled>
-                Pending
+                Requested
               </button>
             )}
 
             {isAccepted && (
-              <button className="btn btn-outline btn-danger" onClick={() => onLeave?.(group.id)} disabled={busy}>
-                {busy ? "Leaving..." : "Leave"}
-              </button>
+              <>
+                <Link to={`/groups/${group.id}`} className="btn btn-secondary">
+                  Enter
+                </Link>
+                <button className="btn btn-outline btn-danger" disabled={busy} onClick={() => onLeave?.(group.id)}>
+                  {busy ? "..." : "Leave"}
+                </button>
+              </>
             )}
           </div>
         </div>

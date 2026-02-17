@@ -231,3 +231,61 @@ func GetUserEvents(db *sql.DB, userID int, limit int) ([]models.Event, error) {
 	}
 	return events, rows.Err()
 }
+// GetGroupEvents lists events for a group (member only).
+func GetGroupEvents(dbConn *sql.DB, groupID int, viewerID int, limit int) ([]models.Event, error) {
+	query := `
+		SELECT
+			e.id, e.group_id, e.creator_id, e.title, e.description, e.location, e.event_date, e.created_at,
+			u.full_name AS creator_name,
+			COALESCE(g.name, '') AS group_name,
+			(SELECT COUNT(1) FROM event_responses r WHERE r.event_id = e.id AND r.response = 'going') AS going_count,
+			(SELECT COUNT(1) FROM event_responses r WHERE r.event_id = e.id AND r.response = 'maybe') AS maybe_count,
+			(SELECT COUNT(1) FROM event_responses r WHERE r.event_id = e.id AND r.response = 'not_going') AS not_going_count,
+			COALESCE((SELECT r2.response FROM event_responses r2 WHERE r2.event_id = e.id AND r2.user_id = ?), '') AS my_response
+		FROM events e
+		JOIN users u ON u.id = e.creator_id
+		LEFT JOIN groups g ON g.id = e.group_id
+		WHERE e.group_id = ?
+		ORDER BY e.event_date ASC
+		LIMIT ?
+	`
+
+	rows, err := dbConn.Query(query, viewerID, groupID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []models.Event
+	for rows.Next() {
+		var ev models.Event
+		var groupName string
+		var myResp string
+		if err := rows.Scan(
+			&ev.ID,
+			&ev.GroupID,
+			&ev.CreatorID,
+			&ev.Title,
+			&ev.Description,
+			&ev.Location,
+			&ev.EventDate,
+			&ev.CreatedAt,
+			&ev.CreatorName,
+			&groupName,
+			&ev.GoingCount,
+			&ev.MaybeCount,
+			&ev.NotGoingCount,
+			&myResp,
+		); err != nil {
+			return nil, err
+		}
+		if groupName != "" {
+			ev.GroupName = groupName
+		}
+		if myResp != "" {
+			ev.MyResponse = myResp
+		}
+		events = append(events, ev)
+	}
+	return events, rows.Err()
+}
