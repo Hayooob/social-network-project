@@ -239,7 +239,7 @@ export default function Layout({ children }) {
 
       {/* Footer */}
       <footer className="footer">
-        <span className="footer-copyright">© 2026 SOCIAL</span>
+        <span className="footer-copyright">© 2026 SOCIAL TEAM @ REBOOT01</span>
         <div className="footer-links">
           <span className="footer-link">About</span>
           <span className="footer-link">Privacy</span>

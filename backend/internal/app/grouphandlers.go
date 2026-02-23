@@ -168,6 +168,12 @@ func (s *Server) handleGroupInvitationRoutes(w http.ResponseWriter, r *http.Requ
 
 // /api/groups/{id}/...
 func (s *Server) handleGroupRoutes(w http.ResponseWriter, r *http.Request) {
+
+	if strings.HasSuffix(r.URL.Path, "/messages") {
+		s.handleGroupMessageRoutes(w, r)
+		return
+	}
+	
 	user := CurrentUser(r.Context())
 	if user == nil {
 		writeError(w, http.StatusUnauthorized, "unauthorized")

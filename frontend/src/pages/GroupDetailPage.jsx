@@ -15,7 +15,7 @@ import { searchUsers } from "../api/users";
 import { createGroupEvent, getGroupEvents, getGroupEventResponses, respondToGroupEvent } from "../api/events";
 import GroupMemberCard from "../components/GroupMemberCard";
 import EventCard from "../components/EventCard";
-
+import GroupChat from "../components/GroupChat";
 export default function GroupDetailPage() {
   const { id } = useParams();
   const groupId = Number(id);
@@ -477,6 +477,13 @@ export default function GroupDetailPage() {
         </>
       ) : (
         <div className="card"><div className="card-body">Join the group to see events.</div></div>
+      )}
+
+      {/* Group Chat - only for accepted members */}
+      {isAcceptedMember && (
+        <div style={{ marginTop: '24px' }}>
+          <GroupChat groupId={groupId} />
+        </div>
       )}
     </div>
   );
