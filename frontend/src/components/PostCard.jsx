@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 
 export default function PostCard({ post }) {
   const formatDate = (timestamp) => {
@@ -12,7 +13,11 @@ export default function PostCard({ post }) {
 
   return (
     <div className="border p-4 mb-4 rounded">
-      <div className="font-bold">{post.author_name || 'Unknown'}</div>
+      <div className="font-bold">
+        <Link to={`/users/${post.user_id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+          {post.author_name || 'Unknown'}
+        </Link>
+      </div>
       <div className="text-sm text-gray-500">{formatDate(post.created_at)}</div>
       <p className="mt-2">{post.content}</p>
     {post.image_path && (

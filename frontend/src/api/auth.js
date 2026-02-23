@@ -7,14 +7,43 @@ export async function login(email, password) {
 }
 
 // POST /api/register
-export async function register({ username, email, password, confirmPassword }) {
-  const user = await post("/api/register", {
-    username,
+export async function register({
+  firstName,
+  lastName,
+  dateOfBirth,
+  email,
+  password,
+  confirmPassword,
+  nickname,
+  aboutMe,
+  avatarFile,
+}) {
+  // If there's an avatar, use multipart/form-data.
+  if (avatarFile) {
+    const fd = new FormData();
+    fd.append("first_name", firstName || "");
+    fd.append("last_name", lastName || "");
+    fd.append("date_of_birth", dateOfBirth || "");
+    fd.append("email", email || "");
+    fd.append("password", password || "");
+    fd.append("confirmPassword", confirmPassword || "");
+    if (nickname) fd.append("nickname", nickname);
+    if (aboutMe) fd.append("about_me", aboutMe);
+    fd.append("avatar", avatarFile);
+    return post("/api/register", fd);
+  }
+
+  // Otherwise JSON.
+  return post("/api/register", {
+    first_name: firstName,
+    last_name: lastName,
+    date_of_birth: dateOfBirth,
     email,
     password,
     confirmPassword,
+    nickname,
+    about_me: aboutMe,
   });
-  return user;
 }
 
 // GET /api/me

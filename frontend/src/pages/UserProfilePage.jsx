@@ -130,6 +130,10 @@ const onToggleLike = async (postId) => {
   }
 
 const { user, counts, viewer } = data;
+  const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8080";
+  const avatarSrc = user?.avatar_url
+    ? (user.avatar_url.startsWith("http") ? user.avatar_url : `${API_BASE}${user.avatar_url}`)
+    : null;
 
   return (
     <div className="main-content">
@@ -140,6 +144,18 @@ const { user, counts, viewer } = data;
         </div>
 
         <div className="card-body">
+          {avatarSrc && (
+            <div style={{ marginBottom: 12 }}>
+              <img
+                src={avatarSrc}
+                alt="avatar"
+                style={{ width: 72, height: 72, borderRadius: 999, objectFit: "cover" }}
+              />
+            </div>
+          )}
+
+          {user.email && <p><strong>Email:</strong> {user.email}</p>}
+          {user.date_of_birth && <p><strong>Date of Birth:</strong> {user.date_of_birth}</p>}
           <p><strong>Nickname:</strong> {user.nickname || "-"}</p>
           <p><strong>About:</strong> {user.about_me || "-"}</p>
           <p><strong>Privacy:</strong> {user.is_private ? "Private" : "Public"}</p>
@@ -178,8 +194,8 @@ const { user, counts, viewer } = data;
         <div className="card-body">
           {!viewer?.can_view && user.is_private ? (
             <p>This profile is private. Follow to view posts.</p>
-          ) : posts && posts.length > 0 ? (
-       posts.map((p) => (
+          ) : postsState && postsState.length > 0 ? (
+       postsState.map((p) => (
   <div key={p.id} className="border p-3 mb-3 rounded">
     <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>
       {p.author_name || "User"} • {new Date(p.created_at).toLocaleString()}
@@ -190,7 +206,7 @@ const { user, counts, viewer } = data;
     {p.image_path && (
       <div style={{ marginTop: 12 }}>
         <img
-          src={`http://localhost:8080${p.image_path}`}
+          src={p.image_path.startsWith("http") ? p.image_path : `${API_BASE}${p.image_path}`}
           alt="post"
           style={{ maxWidth: "100%", borderRadius: 12 }}
         />

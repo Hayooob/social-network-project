@@ -5,10 +5,16 @@ import { register } from "../api/auth";
 export default function RegisterPage() {
   const navigate = useNavigate();
 
-  const [username, setUsername] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+
+  const [nickname, setNickname] = useState("");
+  const [aboutMe, setAboutMe] = useState("");
+  const [avatarFile, setAvatarFile] = useState(null);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -17,7 +23,7 @@ export default function RegisterPage() {
     e.preventDefault();
     setError("");
 
-    if (!username || !email || !password || !confirmPassword) {
+    if (!firstName || !lastName || !dateOfBirth || !email || !password || !confirmPassword) {
       setError("Please fill in all fields.");
       return;
     }
@@ -34,7 +40,17 @@ export default function RegisterPage() {
 
     try {
       setSubmitting(true);
-      await register({ username, email, password, confirmPassword });
+      await register({
+        firstName,
+        lastName,
+        dateOfBirth,
+        email,
+        password,
+        confirmPassword,
+        nickname: nickname || "",
+        aboutMe: aboutMe || "",
+        avatarFile,
+      });
       navigate("/login");
     } catch (err) {
       console.error(err);
@@ -66,14 +82,38 @@ export default function RegisterPage() {
 
           <form onSubmit={handleSubmit}>
             <div className="form-group">
-              <label className="form-label">Username</label>
+              <label className="form-label">First Name</label>
               <input
                 type="text"
                 className="form-input"
-                value={username}
-                autoComplete="username"
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Choose a username"
+                value={firstName}
+                autoComplete="given-name"
+                onChange={(e) => setFirstName(e.target.value)}
+                placeholder="Your first name"
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Last Name</label>
+              <input
+                type="text"
+                className="form-input"
+                value={lastName}
+                autoComplete="family-name"
+                onChange={(e) => setLastName(e.target.value)}
+                placeholder="Your last name"
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Date of Birth</label>
+              <input
+                type="date"
+                className="form-input"
+                value={dateOfBirth}
+                onChange={(e) => setDateOfBirth(e.target.value)}
                 required
               />
             </div>
@@ -88,6 +128,39 @@ export default function RegisterPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="Enter your email"
                 required
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Avatar/Image (Optional)</label>
+              <input
+                type="file"
+                className="form-input"
+                accept="image/png,image/jpeg,image/jpg,image/gif"
+                onChange={(e) => setAvatarFile(e.target.files?.[0] || null)}
+              />
+              <p className="form-helper">PNG / JPG / GIF</p>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Nickname (Optional)</label>
+              <input
+                type="text"
+                className="form-input"
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value)}
+                placeholder="How you want to be shown"
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">About Me (Optional)</label>
+              <textarea
+                className="form-input"
+                value={aboutMe}
+                onChange={(e) => setAboutMe(e.target.value)}
+                placeholder="A short bio"
+                rows={3}
               />
             </div>
 

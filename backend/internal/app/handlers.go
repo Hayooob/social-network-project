@@ -31,10 +31,19 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 // -------------------------
 
 type registerRequest struct {
-	Username        string `json:"username"`
+	// Legacy field (older frontend)
+	Username string `json:"username"`
+
 	Email           string `json:"email"`
 	Password        string `json:"password"`
 	ConfirmPassword string `json:"confirmPassword"`
+
+	// Audit-required fields
+	FirstName   string `json:"first_name"`
+	LastName    string `json:"last_name"`
+	DateOfBirth string `json:"date_of_birth"`
+	Nickname    string `json:"nickname"`
+	AboutMe     string `json:"about_me"`
 }
 
 func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
@@ -43,13 +52,73 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req registerRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
-		return
+	var (
+		req        registerRequest
+		avatarURL  *string
+		nickname   *string
+		aboutMe    *string
+		fullName   string
+		dateOfBirth string
+	)
+
+	ct := r.Header.Get("Content-Type")
+	if strings.HasPrefix(ct, "multipart/form-data") {
+		if err := r.ParseMultipartForm(10 << 20); err != nil { // 10MB
+			writeError(w, http.StatusBadRequest, "invalid multipart form")
+			return
+		}
+
+		req.Email = strings.TrimSpace(r.FormValue("email"))
+		req.Password = r.FormValue("password")
+		req.ConfirmPassword = r.FormValue("confirmPassword")
+		req.FirstName = strings.TrimSpace(r.FormValue("first_name"))
+		req.LastName = strings.TrimSpace(r.FormValue("last_name"))
+		req.DateOfBirth = strings.TrimSpace(r.FormValue("date_of_birth"))
+		req.Nickname = strings.TrimSpace(r.FormValue("nickname"))
+		req.AboutMe = strings.TrimSpace(r.FormValue("about_me"))
+		req.Username = strings.TrimSpace(r.FormValue("username")) // legacy
+
+		// avatar file (optional) - field name: "avatar"
+		file, header, err := r.FormFile("avatar")
+		if err == nil && file != nil && header != nil {
+			defer file.Close()
+
+			_ = os.MkdirAll("uploads", 0755)
+			ext := strings.ToLower(filepath.Ext(header.Filename))
+			switch ext {
+			case ".jpg", ".jpeg", ".png", ".gif":
+				// allowed
+			default:
+				writeError(w, http.StatusBadRequest, "avatar must be JPG, PNG, or GIF")
+				return
+			}
+
+			filename := strconv.FormatInt(time.Now().UnixNano(), 10) + ext
+			dstPath := filepath.Join("uploads", filename)
+
+			dst, err := os.Create(dstPath)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "failed to save avatar")
+				return
+			}
+			defer dst.Close()
+
+			if _, err := io.Copy(dst, file); err != nil {
+				writeError(w, http.StatusInternalServerError, "failed to save avatar")
+				return
+			}
+
+			p := "/uploads/" + filename
+			avatarURL = &p
+		}
+	} else {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
 	}
 
-	if req.Username == "" || req.Email == "" || req.Password == "" || req.ConfirmPassword == "" {
+	if req.Email == "" || req.Password == "" || req.ConfirmPassword == "" {
 		writeError(w, http.StatusBadRequest, "missing required fields")
 		return
 	}
@@ -58,11 +127,32 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// map frontend fields to DB fields
-	fullName := req.Username
-	dateOfBirth := "" // placeholder to satisfy NOT NULL TEXT (your earlier stages)
+	// Full name + DOB: required in the audit form, but keep backward compatibility.
+	if req.FirstName != "" || req.LastName != "" {
+		fullName = strings.TrimSpace(strings.TrimSpace(req.FirstName) + " " + strings.TrimSpace(req.LastName))
+	} else {
+		fullName = strings.TrimSpace(req.Username)
+	}
+	if fullName == "" {
+		writeError(w, http.StatusBadRequest, "first name and last name are required")
+		return
+	}
+	dateOfBirth = strings.TrimSpace(req.DateOfBirth)
+	if dateOfBirth == "" {
+		writeError(w, http.StatusBadRequest, "date of birth is required")
+		return
+	}
 
-	user, err := RegisterUser(r.Context(), s.DB, fullName, dateOfBirth, req.Email, req.Password)
+	if strings.TrimSpace(req.Nickname) != "" {
+		v := strings.TrimSpace(req.Nickname)
+		nickname = &v
+	}
+	if strings.TrimSpace(req.AboutMe) != "" {
+		v := strings.TrimSpace(req.AboutMe)
+		aboutMe = &v
+	}
+
+	user, err := RegisterUser(r.Context(), s.DB, fullName, dateOfBirth, req.Email, req.Password, avatarURL, nickname, aboutMe)
 	if err != nil {
 		switch err {
 		case ErrEmailAlreadyInUse:
@@ -80,6 +170,9 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		"email":         user.Email,
 		"full_name":     user.FullName,
 		"date_of_birth": user.DateOfBirth,
+		"avatar_url":    user.AvatarURL,
+		"nickname":      user.Nickname,
+		"about_me":      user.AboutMe,
 		"is_private":    user.IsPrivate,
 		"created_at":    user.CreatedAt,
 	}
@@ -135,6 +228,9 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		"email":         user.Email,
 		"full_name":     user.FullName,
 		"date_of_birth": user.DateOfBirth,
+		"avatar_url":    user.AvatarURL,
+		"nickname":      user.Nickname,
+		"about_me":      user.AboutMe,
 		"is_private":    user.IsPrivate,
 		"created_at":    user.CreatedAt,
 	}

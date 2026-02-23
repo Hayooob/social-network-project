@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { getFeed, createPost, listComments, createComment, toggleLike } from '../api/posts';
 import { getSuggestedUsers } from '../api/auth';
-import { followUser, getFollowCounts } from '../api/followers';
+import { followUser, getFollowCounts, getMyFollowers } from '../api/followers';
 import { useAuth } from '../VerifyAuth';
 import { useLocation } from "react-router-dom";
 
@@ -20,6 +20,9 @@ const [commentsByPostId, setCommentsByPostId] = useState({});
 const [commentDraftByPostId, setCommentDraftByPostId] = useState({});
 const [likesByPostId, setLikesByPostId] = useState({});
 const [imageFile, setImageFile] = useState(null);
+const [privacy, setPrivacy] = useState("public");
+const [followers, setFollowers] = useState([]);
+const [allowedViewers, setAllowedViewers] = useState([]);
 const location = useLocation();
 
   const fetchData = async () => {
@@ -42,15 +45,38 @@ const location = useLocation();
 
 useEffect(() => { fetchData(); }, [location.key]);
 
+// Load followers once (used for "private" post audience)
+useEffect(() => {
+  let cancelled = false;
+  (async () => {
+    try {
+      const f = await getMyFollowers();
+      if (!cancelled) setFollowers(f);
+    } catch {
+      // ignore
+    }
+  })();
+  return () => {
+    cancelled = true;
+  };
+}, []);
+
 
   const handlePostSubmit = async (e) => {
     e.preventDefault();
     if (!content.trim()) return;
 
+    if (privacy === "private" && (!allowedViewers || allowedViewers.length === 0)) {
+      alert("Choose at least one follower for a private post.");
+      return;
+    }
+
     setPosting(true);
     try {
-await createPost(content.trim(), "public", imageFile);
+await createPost(content.trim(), privacy, imageFile, allowedViewers);
 setImageFile(null);
+setAllowedViewers([]);
+setPrivacy("public");
       setContent('');
       fetchData();
     } catch (err) {
@@ -205,6 +231,53 @@ const onToggleLike = async (postId) => {
                   onChange={(e) => setContent(e.target.value)}
                   disabled={posting}
                 />
+
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginTop: 12 }}>
+                  <label style={{ fontSize: 12, opacity: 0.8 }}>Privacy</label>
+                  <select
+                    className="form-input"
+                    value={privacy}
+                    onChange={(e) => setPrivacy(e.target.value)}
+                    disabled={posting}
+                    style={{ width: 260 }}
+                  >
+                    <option value="public">Public</option>
+                    <option value="almost-private">Almost Private (followers)</option>
+                    <option value="private">Private (choose followers)</option>
+                  </select>
+                </div>
+
+                {privacy === "private" && (
+                  <div className="card" style={{ marginTop: 12 }}>
+                    <div className="card-body">
+                      <p style={{ margin: 0, marginBottom: 10, fontSize: 12, opacity: 0.8 }}>
+                        Choose which followers can see this post:
+                      </p>
+
+                      {followers.length === 0 ? (
+                        <p style={{ margin: 0, fontSize: 12, opacity: 0.8 }}>No followers found.</p>
+                      ) : (
+                        <div style={{ display: 'grid', gap: 8 }}>
+                          {followers.map((f) => (
+                            <label key={f.follower_id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                              <input
+                                type="checkbox"
+                                checked={allowedViewers.includes(f.follower_id)}
+                                onChange={(e) => {
+                                  const id = f.follower_id;
+                                  setAllowedViewers((prev) =>
+                                    e.target.checked ? [...prev, id] : prev.filter((x) => x !== id)
+                                  );
+                                }}
+                              />
+                              <span>{f.follower_name || `User #${f.follower_id}`}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
                 <input
   type="file"
   accept="image/*"
@@ -250,7 +323,10 @@ const onToggleLike = async (postId) => {
                         {getInitial(post.author_name)}
                       </div>
                       <div>
-                        <div className="post-author-name">{post.author_name || 'Unknown'}</div>
+                        <Link className="post-author-name" to={`/users/${post.user_id}`}
+                          style={{ textDecoration: 'none', color: 'inherit' }}>
+                          {post.author_name || 'Unknown'}
+                        </Link>
                         <div className="post-author-handle">@{post.author_name?.toLowerCase().replace(' ', '') || 'user'}</div>
                       </div>
                     </div>

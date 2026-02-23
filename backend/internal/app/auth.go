@@ -39,7 +39,12 @@ func generateUUID() (string, error) {
     return hex.EncodeToString(b), nil
 }
 // validates input, hashes the password, and inserts a new user.
-func RegisterUser(ctx context.Context, dbConn *sql.DB, fullName, dateOfBirth, email, plainPassword string) (*models.User, error) {
+func RegisterUser(
+	ctx context.Context,
+	dbConn *sql.DB,
+	fullName, dateOfBirth, email, plainPassword string,
+	avatarURL, nickname, aboutMe *string,
+) (*models.User, error) {
     // check if email already exists
     existing, err := db.GetUserByEmail(dbConn, email)
     if err != nil {
@@ -70,7 +75,10 @@ func RegisterUser(ctx context.Context, dbConn *sql.DB, fullName, dateOfBirth, em
         PasswordHash: hash,
         FullName:     fullName,
         DateOfBirth:  dateOfBirth,
-        // AvatarURL, Nickname, AboutMe, IsPrivate default for now
+		AvatarURL:    avatarURL,
+		Nickname:     nickname,
+		AboutMe:      aboutMe,
+		// IsPrivate default false
     }
 
     if err := db.CreateUser(dbConn, u); err != nil {

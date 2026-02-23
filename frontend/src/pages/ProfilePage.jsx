@@ -7,6 +7,7 @@ import { togglePrivacy } from '../api/users';
 
 export default function ProfilePage() {
   const { user, setUser } = useAuth();
+  const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8080";
   const [posts, setPosts] = useState([]);
   const [counts, setCounts] = useState({ followers: 0, following: 0 });
   const [loading, setLoading] = useState(true);
@@ -55,6 +56,10 @@ const fetchData = async () => {
   const getInitial = (name) => {
     return name ? name.charAt(0).toUpperCase() : '?';
   };
+
+  const avatarSrc = user?.avatar_url
+    ? (user.avatar_url.startsWith("http") ? user.avatar_url : `${API_BASE}${user.avatar_url}`)
+    : null;
 
   const formatDate = (timestamp) => {
     try {
@@ -148,7 +153,15 @@ const onToggleLike = async (postId) => {
               <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
                 {/* Avatar */}
                 <div className="avatar" style={{ flexShrink: 0 }}>
-                  {getInitial(user.full_name)}
+                  {avatarSrc ? (
+                    <img
+                      src={avatarSrc}
+                      alt="avatar"
+                      style={{ width: 56, height: 56, borderRadius: 999, objectFit: "cover" }}
+                    />
+                  ) : (
+                    getInitial(user.full_name)
+                  )}
                   <div className="avatar-status"></div>
                 </div>
 
@@ -163,6 +176,23 @@ const onToggleLike = async (postId) => {
                   <p style={{ fontSize: '13px', opacity: 0.7, fontFamily: "'Cormorant Garamond', serif" }}>
                     {user.email}
                   </p>
+
+                  {/* Extra details (audit-required + optional) */}
+                  <div style={{ marginTop: 10, display: 'grid', gap: 6 }}>
+                    <div style={{ fontSize: 13, opacity: 0.85, fontFamily: "'Cormorant Garamond', serif" }}>
+                      <strong>Date of Birth:</strong> {user.date_of_birth || "-"}
+                    </div>
+                    {user.nickname && (
+                      <div style={{ fontSize: 13, opacity: 0.85, fontFamily: "'Cormorant Garamond', serif" }}>
+                        <strong>Nickname:</strong> {user.nickname}
+                      </div>
+                    )}
+                    {user.about_me && (
+                      <div style={{ fontSize: 13, opacity: 0.85, fontFamily: "'Cormorant Garamond', serif" }}>
+                        <strong>About Me:</strong> {user.about_me}
+                      </div>
+                    )}
+                  </div>
 
                   {/* Privacy Toggle */}
                   <div style={{ marginTop: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
