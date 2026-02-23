@@ -1,5 +1,5 @@
 # Backend Dockerfile
-FROM golang:1.21-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache gcc musl-dev sqlite-dev
@@ -14,7 +14,7 @@ RUN go mod download
 COPY . .
 
 # Build the application with CGO enabled for SQLite
-RUN CGO_ENABLED=1 GOOS=linux go build -o server ./cmd/server
+RUN CGO_ENABLED=1 GOOS=linux go build -o server ./cmd/main.go
 
 # Production stage
 FROM alpine:latest
