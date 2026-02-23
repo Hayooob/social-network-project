@@ -24,10 +24,12 @@ var upgrader = websocket.Upgrader{
 }
 
 type Client struct {
-	UserID   int64
-	UserName string
-	Conn     *websocket.Conn
-	Send     chan []byte
+	UserID       int64
+	UserName     string
+	Conn         *websocket.Conn
+	Send         chan []byte
+	CurrentPage  string // Track which page the user is on
+	ChatPartnerID int64  // If on messages page, track who they're chatting with
 }
 
 type Hub struct {
@@ -139,11 +141,36 @@ func (h *Hub) IsUserOnline(userID int64) bool {
 	return ok
 }
 
+// IsUserViewingChatWith checks if a user is currently viewing a chat with a specific person
+func (h *Hub) IsUserViewingChatWith(userID int64, chatPartnerID int64) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	
+	if client, ok := h.Clients[userID]; ok {
+		return client.CurrentPage == "messages" && client.ChatPartnerID == chatPartnerID
+	}
+	return false
+}
+
+// UpdateClientPage updates the page status for a client
+func (h *Hub) UpdateClientPage(userID int64, page string, chatPartnerID int64) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	
+	if client, ok := h.Clients[userID]; ok {
+		client.CurrentPage = page
+		client.ChatPartnerID = chatPartnerID
+		log.Printf("User %d page updated: %s (chatting with: %d)", userID, page, chatPartnerID)
+	}
+}
+
 type WSMessage struct {
-	Type      string `json:"type"`
-	To        int64  `json:"to,omitempty"`
-	Content   string `json:"content,omitempty"`
-	MessageID int    `json:"message_id,omitempty"`
+	Type          string `json:"type"`
+	To            int64  `json:"to,omitempty"`
+	Content       string `json:"content,omitempty"`
+	MessageID     int    `json:"message_id,omitempty"`
+	Page          string `json:"page,omitempty"`           // For page_status messages
+	ChatPartnerID int64  `json:"chat_partner_id,omitempty"` // Who user is chatting with
 }
 
 func (s *Server) HandleWebSocket(hub *Hub) http.HandlerFunc {
@@ -168,10 +195,12 @@ func (s *Server) HandleWebSocket(hub *Hub) http.HandlerFunc {
 		log.Printf("WebSocket: Connection upgraded for user %s", user.FullName)
 
 		client := &Client{
-			UserID:   user.ID,
-			UserName: user.FullName,
-			Conn:     conn,
-			Send:     make(chan []byte, 256),
+			UserID:        user.ID,
+			UserName:      user.FullName,
+			Conn:          conn,
+			Send:          make(chan []byte, 256),
+			CurrentPage:   "other", // Default to not on messages page
+			ChatPartnerID: 0,
 		}
 
 		hub.Register <- client
@@ -227,6 +256,8 @@ func (c *Client) readPump(hub *Hub, database *sql.DB) {
 			handleTyping(c, hub, wsMsg)
 		case "mark_read":
 			handleMarkRead(c, database, wsMsg)
+		case "page_status":
+			handlePageStatus(c, hub, wsMsg)
 		default:
 			log.Printf("Unknown message type: %s", wsMsg.Type)
 		}
@@ -279,6 +310,11 @@ func (c *Client) writePump() {
 	}
 }
 
+func handlePageStatus(client *Client, hub *Hub, wsMsg WSMessage) {
+	log.Printf("handlePageStatus: user=%d, page=%s, chatPartner=%d", client.UserID, wsMsg.Page, wsMsg.ChatPartnerID)
+	hub.UpdateClientPage(client.UserID, wsMsg.Page, wsMsg.ChatPartnerID)
+}
+
 func handleChatMessage(sender *Client, hub *Hub, database *sql.DB, wsMsg WSMessage) {
 	log.Printf("handleChatMessage: from=%d, to=%d, content=%s", sender.UserID, wsMsg.To, wsMsg.Content)
 	
@@ -312,11 +348,17 @@ func handleChatMessage(sender *Client, hub *Hub, database *sql.DB, wsMsg WSMessa
 	// Send to receiver
 	hub.SendToUser(wsMsg.To, data)
 
-	// Create notification if receiver is offline
-	if !hub.IsUserOnline(wsMsg.To) {
-		log.Printf("User %d is offline, creating notification", wsMsg.To)
+	// Create notification if:
+	// 1. Receiver is offline, OR
+	// 2. Receiver is online but NOT viewing chat with sender
+	shouldNotify := !hub.IsUserOnline(wsMsg.To) || !hub.IsUserViewingChatWith(wsMsg.To, sender.UserID)
+	
+	if shouldNotify {
+		log.Printf("Creating notification for user %d (offline or not viewing chat)", wsMsg.To)
 		fromUserID := int(sender.UserID)
 		db.CreateNotification(database, int(wsMsg.To), models.NotificationTypeNewMessage, &msg.ID, &fromUserID, "sent you a message")
+	} else {
+		log.Printf("User %d is viewing chat with sender, skipping notification", wsMsg.To)
 	}
 	
 	log.Println("handleChatMessage completed")

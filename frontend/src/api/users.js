@@ -1,17 +1,25 @@
 import { get, post } from "./ftchclient";
 
-// GET /api/users/{id}
+// GET /api/users/{id} - get another user's profile
 export async function getUserProfile(userId) {
   return get(`/api/users/${userId}`);
 }
 
-// POST /api/me/privacy
+// POST /api/me/privacy - toggle your own privacy setting
 export async function togglePrivacy() {
-  return post(`/api/me/privacy`);
+  return post("/api/me/privacy");
 }
 
-// GET /api/users/search?q=...
-export async function searchUsers(q) {
-  const data = await get(`/api/users/search?q=${encodeURIComponent(q)}`);
-  return data || [];
+// GET /api/users/search?q=query - search for users
+export async function searchUsers(query) {
+  if (!query || query.length < 1) {
+    return [];
+  }
+  try {
+    const results = await get(`/api/users/search?q=${encodeURIComponent(query)}`);
+    return results || [];
+  } catch (err) {
+    console.error("searchUsers error:", err);
+    return [];
+  }
 }

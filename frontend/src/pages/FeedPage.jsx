@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { getFeed, createPost, listComments, createComment, toggleLike } from '../api/posts';
 import { getSuggestedUsers } from '../api/auth';
 import { followUser, getFollowCounts, getMyFollowers } from '../api/followers';
 import { useAuth } from '../VerifyAuth';
-import { useLocation } from "react-router-dom";
+import SearchBar from '../components/SearchBar';
 
 
 export default function FeedPage() {
@@ -214,32 +214,32 @@ const onToggleLike = async (postId) => {
           </div>
         </aside>
 
-        {/* Main Content */}
+        {/* Main Feed */}
         <main>
-          {/* Create Post */}
-          <div className="card" style={{ marginBottom: '32px' }}>
+          {/* Create Post Card */}
+          <div className="card card-shadow-left">
             <div className="card-header">
-              <span className="card-header-title">Create Post</span>
+              <span className="card-header-title">Share Something</span>
               <span className="card-header-star star-spin">✦</span>
             </div>
             <div className="card-body">
               <form onSubmit={handlePostSubmit}>
                 <textarea
-                  className="form-input form-textarea"
+                  className="form-textarea"
                   placeholder="What's on your mind?"
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
                   disabled={posting}
-                />
+                  rows={3}
+                ></textarea>
 
-                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginTop: 12 }}>
-                  <label style={{ fontSize: 12, opacity: 0.8 }}>Privacy</label>
+                <div style={{ marginTop: 12 }}>
+                  <label style={{ fontSize: 13, marginRight: 8 }}>Privacy:</label>
                   <select
                     className="form-input"
                     value={privacy}
                     onChange={(e) => setPrivacy(e.target.value)}
-                    disabled={posting}
-                    style={{ width: 260 }}
+                    style={{ width: "auto" }}
                   >
                     <option value="public">Public</option>
                     <option value="almost-private">Almost Private (followers)</option>
@@ -319,12 +319,29 @@ const onToggleLike = async (postId) => {
                 <div className="post-content">
                   <div className="post-header">
                     <div className="post-author-info">
-                      <div className={`avatar avatar-small ${index % 3 === 1 ? 'bg-rose' : index % 3 === 2 ? 'bg-dark' : 'bg-blue'}`}>
-                        {getInitial(post.author_name)}
-                      </div>
+                      <Link 
+                        to={`/users/${post.user_id}`} 
+                        style={{ textDecoration: 'none', display: 'block' }}
+                      >
+                        <div className={`avatar avatar-small ${index % 3 === 1 ? 'bg-rose' : index % 3 === 2 ? 'bg-dark' : 'bg-blue'}`}>
+                          {getInitial(post.author_name)}
+                        </div>
+                      </Link>
                       <div>
-                        <Link className="post-author-name" to={`/users/${post.user_id}`}
-                          style={{ textDecoration: 'none', color: 'inherit' }}>
+                        <Link 
+                          to={`/users/${post.user_id}`} 
+                          style={{ 
+                            textDecoration: 'none', 
+                            color: 'var(--coffee-bean)',
+                            fontWeight: 600,
+                            fontSize: '14px',
+                            fontFamily: "'Montserrat', sans-serif",
+                            display: 'block',
+                            cursor: 'pointer'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.color = 'var(--dusk-blue)'}
+                          onMouseLeave={(e) => e.currentTarget.style.color = 'var(--coffee-bean)'}
+                        >
                           {post.author_name || 'Unknown'}
                         </Link>
                         <div className="post-author-handle">@{post.author_name?.toLowerCase().replace(' ', '') || 'user'}</div>
@@ -405,6 +422,10 @@ const onToggleLike = async (postId) => {
 
         {/* Right Sidebar */}
         <aside>
+          {/* Search Bar */}
+          <SearchBar />
+          
+          {/* Suggested Users */}
           <div className="card card-shadow-left">
             <div style={{ padding: '20px 24px', borderBottom: '1px solid rgba(23, 3, 18, 0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span className="section-title">Suggested</span>
@@ -419,10 +440,14 @@ const onToggleLike = async (postId) => {
               suggestions.map((suggestedUser, index) => (
                 <div key={suggestedUser.id} className="suggestion-item">
                   <div className="suggestion-info">
-                    <div className={`avatar avatar-tiny ${index % 3 === 0 ? 'bg-blue' : index % 3 === 1 ? 'bg-rose' : 'bg-dark'}`}>
-                      {suggestedUser.full_name ? suggestedUser.full_name.charAt(0).toUpperCase() : '?'}
-                    </div>
-                    <span className="suggestion-name">{suggestedUser.full_name || 'Unknown'}</span>
+                    <Link to={`/users/${suggestedUser.id}`} style={{ textDecoration: 'none' }}>
+                      <div className={`avatar avatar-tiny ${index % 3 === 0 ? 'bg-blue' : index % 3 === 1 ? 'bg-rose' : 'bg-dark'}`}>
+                        {suggestedUser.full_name ? suggestedUser.full_name.charAt(0).toUpperCase() : '?'}
+                      </div>
+                    </Link>
+                    <Link to={`/users/${suggestedUser.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                      <span className="suggestion-name">{suggestedUser.full_name || 'Unknown'}</span>
+                    </Link>
                   </div>
                   <button 
                     className="btn btn-outline"

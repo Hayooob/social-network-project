@@ -12,8 +12,7 @@ export default function MessagesPage() {
   const { userId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { isConnected, lastMessage, sendMessage, refreshBadges } = useWebSocket();
-  
+  const { sendMessage, lastMessage, isConnected } = useWebSocket();
   const [conversations, setConversations] = useState([]);
   const [friends, setFriends] = useState([]);
   const [messages, setMessages] = useState([]);
@@ -25,11 +24,34 @@ export default function MessagesPage() {
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef(null);
 
+  // Send page status when entering/leaving messages page or changing chat partner
+  useEffect(() => {
+    if (isConnected) {
+      // Tell backend we're on messages page
+      sendMessage({
+        type: 'page_status',
+        page: 'messages',
+        chat_partner_id: userId ? parseInt(userId) : 0
+      });
+    }
+
+    // Cleanup: tell backend we left messages page
+    return () => {
+      if (isConnected) {
+        sendMessage({
+          type: 'page_status',
+          page: 'other',
+          chat_partner_id: 0
+        });
+      }
+    };
+  }, [isConnected, userId, sendMessage]);
+
   // Fetch conversations list
   const fetchConversations = async () => {
     try {
       const data = await getConversations();
-      setConversations(data || []);
+      setConversations(data);
     } catch (err) {
       console.error('Error fetching conversations:', err);
     }
@@ -39,7 +61,7 @@ export default function MessagesPage() {
   const fetchFriends = async () => {
     try {
       const data = await getFriends();
-      setFriends(data || []);
+      setFriends(data);
     } catch (err) {
       console.error('Error fetching friends:', err);
     }
@@ -49,7 +71,7 @@ export default function MessagesPage() {
   const fetchMessages = async (targetUserId) => {
     try {
       const data = await getConversation(targetUserId);
-      setMessages(data || []);
+      setMessages(data);
       
       // Find user name from conversations or friends
       const conv = conversations.find(c => c.user_id === parseInt(targetUserId));
@@ -59,12 +81,6 @@ export default function MessagesPage() {
       } else if (friend) {
         setActiveUser({ id: friend.id, name: friend.full_name });
       }
-      
-      // Messages are marked as read by the backend when fetched
-      // Trigger badge refresh after a short delay to allow backend to process
-      setTimeout(() => {
-        refreshBadges();
-      }, 500);
     } catch (err) {
       console.error('Error fetching messages:', err);
     }
@@ -88,39 +104,26 @@ export default function MessagesPage() {
       setMessages([]);
       setActiveUser(null);
     }
-  }, [userId, conversations.length, friends.length]);
+  }, [userId, conversations, friends]);
 
   // Handle incoming WebSocket messages
   useEffect(() => {
-    if (!lastMessage) return;
-    
-    if (lastMessage.type === 'chat_message') {
+    if (lastMessage && lastMessage.type === 'chat_message') {
       const msg = lastMessage.message;
       
-      // If this message is part of the active conversation, add it
+      // Add message to current conversation if relevant
       if (userId && (msg.sender_id === parseInt(userId) || msg.receiver_id === parseInt(userId))) {
         setMessages(prev => {
           // Avoid duplicates
-          if (prev.some(m => m.id === msg.id)) {
-            return prev;
-          }
+          if (prev.some(m => m.id === msg.id)) return prev;
           return [...prev, msg];
         });
-        
-        // If we're viewing this conversation, mark as read and refresh badges
-        if (msg.sender_id === parseInt(userId)) {
-          // The message is from the person we're chatting with
-          // Backend will mark it as read when we fetch, but let's refresh badges
-          setTimeout(() => {
-            refreshBadges();
-          }, 1000);
-        }
       }
       
-      // Refresh conversations to update last message
+      // Refresh conversations list
       fetchConversations();
     }
-  }, [lastMessage, userId, refreshBadges]);
+  }, [lastMessage, userId]);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -130,25 +133,17 @@ export default function MessagesPage() {
   // Send message via WebSocket
   const handleSend = async (e) => {
     e.preventDefault();
-    
-    if (!newMessage.trim() || !userId) {
-      return;
-    }
-    
-    if (!isConnected) {
-      alert('Connection lost. Please refresh the page.');
-      return;
-    }
+    if (!newMessage.trim() || !userId) return;
 
     setSending(true);
     try {
-      const success = sendMessage({
+      const sent = sendMessage({
         type: 'chat_message',
         to: parseInt(userId),
         content: newMessage.trim()
       });
       
-      if (success) {
+      if (sent) {
         setNewMessage('');
       }
     } catch (err) {
@@ -174,6 +169,11 @@ export default function MessagesPage() {
     f.nickname?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // Friends who don't have existing conversations
+  const newChatFriends = filteredFriends.filter(f => 
+    !conversations.some(c => c.user_id === f.id)
+  );
+
   return (
     <div className="main-content">
       <div style={{
@@ -187,32 +187,23 @@ export default function MessagesPage() {
         <div className="card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span className="card-header-title">Messages</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {/* Connection indicator */}
-              <span style={{
-                width: '8px',
-                height: '8px',
-                borderRadius: '50%',
-                backgroundColor: isConnected ? '#22c55e' : '#ef4444'
-              }} title={isConnected ? 'Connected' : 'Disconnected'} />
-              <button 
-                onClick={() => setShowSearch(!showSearch)}
-                style={{ 
-                  background: 'none', 
-                  border: 'none', 
-                  cursor: 'pointer',
-                  padding: '4px',
-                  display: 'flex',
-                  alignItems: 'center'
-                }}
-              >
-                {showSearch ? (
-                  <X size={18} color="var(--coffee-bean)" />
-                ) : (
-                  <Search size={18} color="var(--coffee-bean)" />
-                )}
-              </button>
-            </div>
+            <button 
+              onClick={() => setShowSearch(!showSearch)}
+              style={{ 
+                background: 'none', 
+                border: 'none', 
+                cursor: 'pointer',
+                padding: '4px',
+                display: 'flex',
+                alignItems: 'center'
+              }}
+            >
+              {showSearch ? (
+                <X size={18} color="var(--coffee-bean)" />
+              ) : (
+                <Search size={18} color="var(--coffee-bean)" />
+              )}
+            </button>
           </div>
 
           {/* Search Bar */}
@@ -410,13 +401,13 @@ export default function MessagesPage() {
                   placeholder="Type a message..."
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
-                  disabled={sending || !isConnected}
+                  disabled={sending}
                   style={{ flex: 1 }}
                 />
                 <button 
                   type="submit" 
                   className="btn btn-primary"
-                  disabled={sending || !newMessage.trim() || !isConnected}
+                  disabled={sending || !newMessage.trim()}
                   style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                 >
                   Send

@@ -23,14 +23,12 @@ export default function Layout({ children }) {
   useEffect(() => {
     async function fetchCounts() {
       if (user) {
-        console.log('Layout: Fetching badge counts... trigger:', badgeRefreshTrigger, 'connected:', isConnected);
         try {
           const [requests, notifs, msgs] = await Promise.all([
             getPendingRequests(),
             getUnreadNotificationCount(),
             getUnreadMessageCount()
           ]);
-          console.log('Layout: Badge counts received', { requests: requests.length, notifs, msgs });
           setRequestCount(requests.length);
           setNotificationCount(notifs);
           setMessageCount(msgs);
