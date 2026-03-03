@@ -16,8 +16,11 @@ import { createGroupEvent, getGroupEvents, getGroupEventResponses, respondToGrou
 import GroupMemberCard from "../components/GroupMemberCard";
 import EventCard from "../components/EventCard";
 import GroupChat from "../components/GroupChat";
+import GroupPostCard from "../components/GroupPostCard";
+import { useAuth } from "../VerifyAuth";
 export default function GroupDetailPage() {
   const { id } = useParams();
+  const { user } = useAuth();
   const groupId = Number(id);
 
   const [group, setGroup] = useState(null);
@@ -400,14 +403,12 @@ export default function GroupDetailPage() {
         <div className="card"><div className="card-body">No posts yet.</div></div>
       ) : (
         posts.map((p) => (
-          <div key={p.id} className="card" style={{ marginBottom: 12 }}>
-            <div className="card-body">
-              <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>
-                {p.author_name} • {p.created_at ? new Date(p.created_at).toLocaleString() : ""}
-              </div>
-              <div>{p.content}</div>
-            </div>
-          </div>
+          <GroupPostCard
+            key={p.id}
+            post={p}
+            groupId={groupId}
+            userId={user?.id}
+          />
         ))
       )}
 

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"social-network/internal/db"
+	"social-network/internal/models"
 )
 
 type createGroupRequest struct {
@@ -173,7 +174,7 @@ func (s *Server) handleGroupRoutes(w http.ResponseWriter, r *http.Request) {
 		s.handleGroupMessageRoutes(w, r)
 		return
 	}
-	
+
 	user := CurrentUser(r.Context())
 	if user == nil {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
@@ -373,7 +374,8 @@ func (s *Server) handleGroupRoutes(w http.ResponseWriter, r *http.Request) {
 		}
 
 	case "posts":
-		// keep your group posts logic as-is (member only)
+		// /api/groups/{id}/posts
+		// /api/groups/{id}/posts/{postId}/comments
 		isMember, err := db.IsGroupMember(s.DB, groupID, uid)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "could not check membership")
@@ -384,6 +386,18 @@ func (s *Server) handleGroupRoutes(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// /api/groups/{id}/posts/{postId}/comments
+		if len(parts) >= 5 && parts[2] == "posts" && parts[4] == "comments" {
+			postID, err := strconv.Atoi(parts[3])
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "invalid post id")
+				return
+			}
+			s.handleGroupPostComments(w, r, groupID, postID, uid)
+			return
+		}
+
+		// /api/groups/{id}/posts (GET, POST)
 		switch r.Method {
 		case http.MethodGet:
 			posts, err := db.GetGroupPosts(s.DB, groupID, 50)
@@ -548,6 +562,51 @@ func (s *Server) handleGroupRoutes(w http.ResponseWriter, r *http.Request) {
 
 	default:
 		writeError(w, http.StatusNotFound, "not found")
+		return
+	}
+}
+
+// handleGroupPostComments handles GET and POST for group post comments
+func (s *Server) handleGroupPostComments(w http.ResponseWriter, r *http.Request, groupID int, postID int, uid int) {
+	var req struct {
+		Content   string `json:"content"`
+		ImagePath string `json:"image_path,omitempty"`
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		comments, err := db.GetGroupPostComments(s.DB, postID)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to fetch comments")
+			return
+		}
+		if comments == nil {
+			comments = []models.GroupPostComment{}
+		}
+		writeJSON(w, http.StatusOK, comments)
+		return
+
+	case http.MethodPost:
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		if strings.TrimSpace(req.Content) == "" {
+			writeError(w, http.StatusBadRequest, "content is required")
+			return
+		}
+
+		comment, err := db.AddGroupPostComment(s.DB, postID, uid, req.Content, req.ImagePath)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to create comment")
+			return
+		}
+
+		writeJSON(w, http.StatusCreated, comment)
+		return
+
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 }

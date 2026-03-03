@@ -53,11 +53,11 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var (
-		req        registerRequest
-		avatarURL  *string
-		nickname   *string
-		aboutMe    *string
-		fullName   string
+		req         registerRequest
+		avatarURL   *string
+		nickname    *string
+		aboutMe     *string
+		fullName    string
 		dateOfBirth string
 	)
 
@@ -406,6 +406,13 @@ func (s *Server) handleGetUserProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check if there's a pending follow request from current user to target
+	isPending := false
+	followStatus, err := db.GetFollowStatus(s.DB, int(currentUser.ID), int(targetUser.ID))
+	if err == nil && followStatus != nil && followStatus.Status == "pending" {
+		isPending = true
+	}
+
 	canViewFull := !targetUser.IsPrivate || isFollowing
 
 	followerCount, _ := db.GetFollowerCount(s.DB, int(targetUser.ID))
@@ -429,6 +436,7 @@ func (s *Server) handleGetUserProfile(w http.ResponseWriter, r *http.Request) {
 			"posts": []any{}, // hidden
 			"viewer": map[string]any{
 				"is_following": false,
+				"is_pending":   isPending,
 				"is_self":      false,
 				"can_view":     false,
 			},
@@ -437,12 +445,12 @@ func (s *Server) handleGetUserProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Public profile OR follower => show profile + visible posts (public + almost-private)
-posts, err := db.GetPostsByUserVisibleForViewer(
-    s.DB,
-    int(targetUser.ID),     // whose profile
-    int(currentUser.ID),    // viewer
-    isFollowing,            // includeAlmost
-)
+	posts, err := db.GetPostsByUserVisibleForViewer(
+		s.DB,
+		int(targetUser.ID),  // whose profile
+		int(currentUser.ID), // viewer
+		isFollowing,         // includeAlmost
+	)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to fetch posts")
 		return
@@ -468,6 +476,7 @@ posts, err := db.GetPostsByUserVisibleForViewer(
 		"posts": posts,
 		"viewer": map[string]any{
 			"is_following": isFollowing,
+			"is_pending":   isPending,
 			"is_self":      false,
 			"can_view":     true,
 		},
@@ -649,7 +658,7 @@ func (s *Server) GetMyPosts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-posts, err := db.GetPostsByUserVisibleForViewer(s.DB, int(user.ID), int(user.ID), true)
+	posts, err := db.GetPostsByUserVisibleForViewer(s.DB, int(user.ID), int(user.ID), true)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to fetch posts")
 		return
