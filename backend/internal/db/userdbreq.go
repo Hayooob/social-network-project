@@ -152,6 +152,22 @@ func UpdateUserPrivacy(db *sql.DB, userID int64, isPrivate bool) error {
 	return err
 }
 
+// UpdateUserProfile updates the editable profile fields for a user.
+// fullName and dateOfBirth are required; avatarURL, nickname, and aboutMe may be nil to store NULL.
+func UpdateUserProfile(db *sql.DB, userID int64, fullName, dateOfBirth string, avatarURL, nickname, aboutMe *string) error {
+	stmt := `
+        UPDATE users
+        SET full_name = ?,
+            date_of_birth = ?,
+            avatar_url = ?,
+            nickname = ?,
+            about_me = ?
+        WHERE id = ?
+    `
+	_, err := db.Exec(stmt, fullName, dateOfBirth, avatarURL, nickname, aboutMe, userID)
+	return err
+}
+
 // GetSuggestedUsers returns users that the current user is NOT following (accepted or pending).
 func GetSuggestedUsers(db *sql.DB, currentUserID int64, limit int) ([]models.User, error) {
 	query := `
