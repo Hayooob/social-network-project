@@ -366,20 +366,38 @@ export default function UserProfilePage() {
                   gap: "12px",
                   marginBottom: "12px"
                 }}>
-                  <div style={{
-                    width: "36px",
-                    height: "36px",
-                    borderRadius: "50%",
-                    backgroundColor: index % 3 === 0 ? "var(--dusk-blue)" : index % 3 === 1 ? "var(--blush-rose)" : "var(--jet-black)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "var(--white)",
-                    fontSize: "14px",
-                    fontWeight: 600
-                  }}>
-                    {(p.author_name || "U").charAt(0).toUpperCase()}
-                  </div>
+                  {(() => {
+                    const avatarSrc = p.author_avatar_url
+                      ? (p.author_avatar_url.startsWith("http")
+                        ? p.author_avatar_url
+                        : `${API_BASE}${p.author_avatar_url}`)
+                      : null;
+                    const color = index % 3 === 0 ? "var(--dusk-blue)" : index % 3 === 1 ? "var(--blush-rose)" : "var(--jet-black)";
+                    return (
+                      <div style={{
+                        width: "36px",
+                        height: "36px",
+                        borderRadius: "50%",
+                        backgroundColor: avatarSrc ? "transparent" : color,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "var(--white)",
+                        fontSize: "14px",
+                        fontWeight: 600
+                      }}>
+                        {avatarSrc ? (
+                          <img
+                            src={avatarSrc}
+                            alt="avatar"
+                            style={{ width: '100%', height: '100%', borderRadius: '50%' }}
+                          />
+                        ) : (
+                          (p.author_name || "U").charAt(0).toUpperCase()
+                        )}
+                      </div>
+                    );
+                  })()}
                   <div style={{ flex: 1 }}>
                     <div style={{
                       fontWeight: 600,

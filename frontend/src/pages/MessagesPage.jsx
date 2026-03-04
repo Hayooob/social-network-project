@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getConversations, getConversation } from '../api/messages';
+
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8080";
 import { getFriends } from '../api/followers';
 import { useAuth } from '../VerifyAuth';
 import { useWebSocket } from '../WebSocketContext';
@@ -72,14 +74,14 @@ export default function MessagesPage() {
     try {
       const data = await getConversation(targetUserId);
       setMessages(data);
-      
+
       // Find user name from conversations or friends
       const conv = conversations.find(c => c.user_id === parseInt(targetUserId));
       const friend = friends.find(f => f.id === parseInt(targetUserId));
       if (conv) {
-        setActiveUser({ id: conv.user_id, name: conv.user_name });
+        setActiveUser({ id: conv.user_id, name: conv.user_name, avatar_url: conv.avatar_url });
       } else if (friend) {
-        setActiveUser({ id: friend.id, name: friend.full_name });
+        setActiveUser({ id: friend.id, name: friend.full_name, avatar_url: friend.avatar_url });
       }
     } catch (err) {
       console.error('Error fetching messages:', err);
@@ -110,7 +112,7 @@ export default function MessagesPage() {
   useEffect(() => {
     if (lastMessage && lastMessage.type === 'chat_message') {
       const msg = lastMessage.message;
-      
+
       // Add message to current conversation if relevant
       if (userId && (msg.sender_id === parseInt(userId) || msg.receiver_id === parseInt(userId))) {
         setMessages(prev => {
@@ -119,7 +121,7 @@ export default function MessagesPage() {
           return [...prev, msg];
         });
       }
-      
+
       // Refresh conversations list
       fetchConversations();
     }
@@ -142,7 +144,7 @@ export default function MessagesPage() {
         to: parseInt(userId),
         content: newMessage.trim()
       });
-      
+
       if (sent) {
         setNewMessage('');
       }
@@ -164,13 +166,13 @@ export default function MessagesPage() {
   };
 
   // Filter friends based on search
-  const filteredFriends = friends.filter(f => 
+  const filteredFriends = friends.filter(f =>
     f.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     f.nickname?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   // Friends who don't have existing conversations
-  const newChatFriends = filteredFriends.filter(f => 
+  const newChatFriends = filteredFriends.filter(f =>
     !conversations.some(c => c.user_id === f.id)
   );
 
@@ -187,11 +189,11 @@ export default function MessagesPage() {
         <div className="card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span className="card-header-title">Messages</span>
-            <button 
+            <button
               onClick={() => setShowSearch(!showSearch)}
-              style={{ 
-                background: 'none', 
-                border: 'none', 
+              style={{
+                background: 'none',
+                border: 'none',
                 cursor: 'pointer',
                 padding: '4px',
                 display: 'flex',
@@ -217,14 +219,14 @@ export default function MessagesPage() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 style={{ width: '100%' }}
               />
-              
+
               {/* Search Results - Friends you can message */}
               {searchQuery && (
                 <div style={{ marginTop: '8px' }}>
                   {filteredFriends.length === 0 ? (
-                    <p style={{ 
-                      fontSize: '12px', 
-                      color: 'var(--jet-black)', 
+                    <p style={{
+                      fontSize: '12px',
+                      color: 'var(--jet-black)',
                       opacity: 0.6,
                       padding: '8px 0'
                     }}>
@@ -232,7 +234,7 @@ export default function MessagesPage() {
                     </p>
                   ) : (
                     filteredFriends.map(friend => (
-                      <div 
+                      <div
                         key={friend.id}
                         onClick={() => handleStartChat(friend.id)}
                         style={{
@@ -247,22 +249,39 @@ export default function MessagesPage() {
                         onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(45, 81, 149, 0.08)'}
                         onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                       >
-                        <div style={{
-                          width: '36px',
-                          height: '36px',
-                          borderRadius: '50%',
-                          backgroundColor: 'var(--dusk-blue)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          color: 'var(--white)',
-                          fontSize: '14px',
-                          fontWeight: 600
-                        }}>
-                          {getInitial(friend.full_name)}
-                        </div>
-                        <span style={{ 
-                          fontSize: '13px', 
+                        {(() => {
+                          const avatarSrc = friend.avatar_url
+                            ? (friend.avatar_url.startsWith('http')
+                              ? friend.avatar_url
+                              : `${API_BASE}${friend.avatar_url}`)
+                            : null;
+                          return (
+                            <div style={{
+                              width: '36px',
+                              height: '36px',
+                              borderRadius: '50%',
+                              backgroundColor: avatarSrc ? 'transparent' : 'var(--dusk-blue)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: 'var(--white)',
+                              fontSize: '14px',
+                              fontWeight: 600
+                            }}>
+                              {avatarSrc ? (
+                                <img
+                                  src={avatarSrc}
+                                  alt="avatar"
+                                  style={{ width: '100%', height: '100%', borderRadius: '50%' }}
+                                />
+                              ) : (
+                                getInitial(friend.full_name)
+                              )}
+                            </div>
+                          );
+                        })()}
+                        <span style={{
+                          fontSize: '13px',
                           fontWeight: 500,
                           color: 'var(--coffee-bean)'
                         }}>
@@ -275,7 +294,7 @@ export default function MessagesPage() {
               )}
             </div>
           )}
-          
+
           <div style={{ flex: 1, overflowY: 'auto' }}>
             {loading ? (
               <div style={{ padding: '20px', textAlign: 'center' }}>
@@ -286,7 +305,7 @@ export default function MessagesPage() {
                 <p style={{ opacity: 0.6, fontFamily: "'Cormorant Garamond', serif", marginBottom: '12px' }}>
                   No conversations yet
                 </p>
-                <button 
+                <button
                   className="btn btn-outline"
                   onClick={() => setShowSearch(true)}
                   style={{ fontSize: '12px', padding: '8px 16px' }}
@@ -306,17 +325,17 @@ export default function MessagesPage() {
         {/* Right Panel - Active Conversation */}
         <div className="card" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           {!userId ? (
-            <div style={{ 
-              flex: 1, 
-              display: 'flex', 
-              alignItems: 'center', 
+            <div style={{
+              flex: 1,
+              display: 'flex',
+              alignItems: 'center',
               justifyContent: 'center',
               flexDirection: 'column',
               gap: '16px'
             }}>
               <MessageCircle size={48} color="var(--dusk-blue)" strokeWidth={1.5} />
-              <p style={{ 
-                opacity: 0.6, 
+              <p style={{
+                opacity: 0.6,
                 fontFamily: "'Cormorant Garamond', serif",
                 fontSize: '16px'
               }}>
@@ -333,20 +352,37 @@ export default function MessagesPage() {
                 alignItems: 'center',
                 gap: '12px'
               }}>
-                <div style={{
-                  width: '40px',
-                  height: '40px',
-                  borderRadius: '50%',
-                  backgroundColor: 'var(--dusk-blue)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'var(--white)',
-                  fontSize: '16px',
-                  fontWeight: 600
-                }}>
-                  {getInitial(activeUser?.name)}
-                </div>
+                {(() => {
+                  const avatarSrc = activeUser?.avatar_url
+                    ? (activeUser.avatar_url.startsWith('http')
+                      ? activeUser.avatar_url
+                      : `${API_BASE}${activeUser.avatar_url}`)
+                    : null;
+                  return (
+                    <div style={{
+                      width: '40px',
+                      height: '40px',
+                      borderRadius: '50%',
+                      backgroundColor: avatarSrc ? 'transparent' : 'var(--dusk-blue)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'var(--white)',
+                      fontSize: '16px',
+                      fontWeight: 600
+                    }}>
+                      {avatarSrc ? (
+                        <img
+                          src={avatarSrc}
+                          alt="avatar"
+                          style={{ width: '100%', height: '100%', borderRadius: '50%' }}
+                        />
+                      ) : (
+                        getInitial(activeUser?.name)
+                      )}
+                    </div>
+                  );
+                })()}
                 <div>
                   <h3 style={{
                     margin: 0,
@@ -369,18 +405,18 @@ export default function MessagesPage() {
               }}>
                 {messages.length === 0 ? (
                   <div style={{ textAlign: 'center', paddingTop: '40px' }}>
-                    <p style={{ 
-                      opacity: 0.6, 
-                      fontFamily: "'Cormorant Garamond', serif" 
+                    <p style={{
+                      opacity: 0.6,
+                      fontFamily: "'Cormorant Garamond', serif"
                     }}>
                       No messages yet. Say hello!
                     </p>
                   </div>
                 ) : (
                   messages.map(msg => (
-                    <MessageBubble 
-                      key={msg.id} 
-                      message={msg} 
+                    <MessageBubble
+                      key={msg.id}
+                      message={msg}
                       isOwn={msg.sender_id === user?.id}
                     />
                   ))
@@ -404,8 +440,8 @@ export default function MessagesPage() {
                   disabled={sending}
                   style={{ flex: 1 }}
                 />
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   className="btn btn-primary"
                   disabled={sending || !newMessage.trim()}
                   style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
