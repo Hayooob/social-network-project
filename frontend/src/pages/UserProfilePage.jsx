@@ -1,3 +1,4 @@
+import React from "react";
 import { useEffect, useState } from "react";
 import { useParams, Link, useLocation } from "react-router-dom";
 import { getUserProfile } from "../api/users";
@@ -45,14 +46,21 @@ export default function UserProfilePage() {
     setFollowLoading(true);
     try {
       const isCurrentlyFollowing = data?.viewer?.is_following;
+
       if (!isCurrentlyFollowing) {
         await followUser(id);
       } else {
         await unfollowUser(id);
       }
+
       await fetchProfile();
     } catch (err) {
-      console.error("Follow action failed:", err);
+      if (err.message?.includes("already following")) {
+        // Just refresh state silently
+        await fetchProfile();
+      } else {
+        alert(err.message || "Something went wrong");
+      }
     } finally {
       setFollowLoading(false);
     }
@@ -236,9 +244,9 @@ export default function UserProfilePage() {
 
           {/* About Me */}
           {user.about_me && (
-            <p style={{ 
-              margin: "0 0 20px", 
-              fontSize: "15px", 
+            <p style={{
+              margin: "0 0 20px",
+              fontSize: "15px",
               lineHeight: 1.6,
               color: "var(--jet-black)",
               fontFamily: "'Cormorant Garamond', serif"
@@ -333,8 +341,8 @@ export default function UserProfilePage() {
         <div style={{ padding: "0" }}>
           {!viewer?.can_view && user.is_private ? (
             <div style={{ padding: "40px 24px", textAlign: "center" }}>
-              <p style={{ 
-                color: "var(--jet-black)", 
+              <p style={{
+                color: "var(--jet-black)",
                 opacity: 0.6,
                 fontFamily: "'Cormorant Garamond', serif",
                 fontSize: "16px"
@@ -344,34 +352,52 @@ export default function UserProfilePage() {
             </div>
           ) : postsState && postsState.length > 0 ? (
             postsState.map((p, index) => (
-              <div 
-                key={p.id} 
-                style={{ 
+              <div
+                key={p.id}
+                style={{
                   padding: "20px 24px",
                   borderBottom: index < postsState.length - 1 ? "1px solid rgba(23, 3, 18, 0.08)" : "none"
                 }}
               >
                 {/* Post Header */}
-                <div style={{ 
-                  display: "flex", 
-                  alignItems: "center", 
+                <div style={{
+                  display: "flex",
+                  alignItems: "center",
                   gap: "12px",
                   marginBottom: "12px"
                 }}>
-                  <div style={{
-                    width: "36px",
-                    height: "36px",
-                    borderRadius: "50%",
-                    backgroundColor: index % 3 === 0 ? "var(--dusk-blue)" : index % 3 === 1 ? "var(--blush-rose)" : "var(--jet-black)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "var(--white)",
-                    fontSize: "14px",
-                    fontWeight: 600
-                  }}>
-                    {(p.author_name || "U").charAt(0).toUpperCase()}
-                  </div>
+                  {(() => {
+                    const avatarSrc = p.author_avatar_url
+                      ? (p.author_avatar_url.startsWith("http")
+                        ? p.author_avatar_url
+                        : `${API_BASE}${p.author_avatar_url}`)
+                      : null;
+                    const color = index % 3 === 0 ? "var(--dusk-blue)" : index % 3 === 1 ? "var(--blush-rose)" : "var(--jet-black)";
+                    return (
+                      <div style={{
+                        width: "36px",
+                        height: "36px",
+                        borderRadius: "50%",
+                        backgroundColor: avatarSrc ? "transparent" : color,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "var(--white)",
+                        fontSize: "14px",
+                        fontWeight: 600
+                      }}>
+                        {avatarSrc ? (
+                          <img
+                            src={avatarSrc}
+                            alt="avatar"
+                            style={{ width: '100%', height: '100%', borderRadius: '50%' }}
+                          />
+                        ) : (
+                          (p.author_name || "U").charAt(0).toUpperCase()
+                        )}
+                      </div>
+                    );
+                  })()}
                   <div style={{ flex: 1 }}>
                     <div style={{
                       fontWeight: 600,
@@ -462,8 +488,8 @@ export default function UserProfilePage() {
             ))
           ) : (
             <div style={{ padding: "40px 24px", textAlign: "center" }}>
-              <p style={{ 
-                color: "var(--jet-black)", 
+              <p style={{
+                color: "var(--jet-black)",
                 opacity: 0.6,
                 fontFamily: "'Cormorant Garamond', serif",
                 fontSize: "16px"

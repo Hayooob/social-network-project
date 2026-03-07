@@ -14,9 +14,11 @@ type Message struct {
 }
 
 type Conversation struct {
-	UserID         int       `json:"user_id"`
-	UserName       string    `json:"user_name"`
-	LastMessage    string    `json:"last_message"`
-	LastMessageAt  time.Time `json:"last_message_at"`
-	UnreadCount    int       `json:"unread_count"`
+	UserID   int    `json:"user_id"`
+	UserName string `json:"user_name"`
+	// avatar url for the other user (may be empty string)
+	AvatarURL     string    `json:"avatar_url,omitempty"`
+	LastMessage   string    `json:"last_message"`
+	LastMessageAt time.Time `json:"last_message_at"`
+	UnreadCount   int       `json:"unread_count"`
 }

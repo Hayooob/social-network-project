@@ -53,11 +53,11 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var (
-		req        registerRequest
-		avatarURL  *string
-		nickname   *string
-		aboutMe    *string
-		fullName   string
+		req         registerRequest
+		avatarURL   *string
+		nickname    *string
+		aboutMe     *string
+		fullName    string
 		dateOfBirth string
 	)
 
@@ -261,28 +261,166 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
 	user := CurrentUser(r.Context())
 	if user == nil {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
-	resp := map[string]any{
-		"id":            user.ID,
-		"uuid":          user.UUID,
-		"email":         user.Email,
-		"full_name":     user.FullName,
-		"date_of_birth": user.DateOfBirth,
-		"is_private":    user.IsPrivate,
-		"created_at":    user.CreatedAt,
-	}
+	switch r.Method {
+	case http.MethodGet:
+		resp := map[string]any{
+			"id":            user.ID,
+			"uuid":          user.UUID,
+			"email":         user.Email,
+			"full_name":     user.FullName,
+			"date_of_birth": user.DateOfBirth,
+			"avatar_url":    user.AvatarURL,
+			"nickname":      user.Nickname,
+			"about_me":      user.AboutMe,
+			"is_private":    user.IsPrivate,
+			"created_at":    user.CreatedAt,
+		}
+		writeJSON(w, http.StatusOK, resp)
+		return
 
-	writeJSON(w, http.StatusOK, resp)
+	case http.MethodPut:
+		// update profile information
+		var (
+			fullName    string
+			dateOfBirth string
+			nickname    *string
+			aboutMe     *string
+			avatarURL   *string
+		)
+
+		ct := r.Header.Get("Content-Type")
+		if strings.HasPrefix(ct, "multipart/form-data") {
+			if err := r.ParseMultipartForm(10 << 20); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid multipart form")
+				return
+			}
+
+			fullName = strings.TrimSpace(r.FormValue("full_name"))
+			dateOfBirth = strings.TrimSpace(r.FormValue("date_of_birth"))
+			if v := strings.TrimSpace(r.FormValue("nickname")); v != "" {
+				nickname = &v
+			}
+			if v := strings.TrimSpace(r.FormValue("about_me")); v != "" {
+				aboutMe = &v
+			}
+
+			file, header, err := r.FormFile("avatar")
+			if err == nil && file != nil && header != nil {
+				defer file.Close()
+				_ = os.MkdirAll("uploads", 0755)
+				ext := strings.ToLower(filepath.Ext(header.Filename))
+				switch ext {
+				case ".jpg", ".jpeg", ".png", ".gif":
+					// allowed types
+				default:
+					writeError(w, http.StatusBadRequest, "avatar must be JPG, PNG, or GIF")
+					return
+				}
+
+				filename := strconv.FormatInt(time.Now().UnixNano(), 10) + ext
+				dstPath := filepath.Join("uploads", filename)
+				dst, err := os.Create(dstPath)
+				if err != nil {
+					writeError(w, http.StatusInternalServerError, "failed to save avatar")
+					return
+				}
+				defer dst.Close()
+
+				if _, err := io.Copy(dst, file); err != nil {
+					writeError(w, http.StatusInternalServerError, "failed to save avatar")
+					return
+				}
+
+				p := "/uploads/" + filename
+				avatarURL = &p
+			}
+		} else {
+			// JSON body
+			type reqStruct struct {
+				FullName    *string `json:"full_name"`
+				DateOfBirth *string `json:"date_of_birth"`
+				Nickname    *string `json:"nickname"`
+				AboutMe     *string `json:"about_me"`
+			}
+			var req reqStruct
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				writeError(w, http.StatusBadRequest, "invalid JSON body")
+				return
+			}
+			if req.FullName != nil {
+				fullName = strings.TrimSpace(*req.FullName)
+			}
+			if req.DateOfBirth != nil {
+				dateOfBirth = strings.TrimSpace(*req.DateOfBirth)
+			}
+			if req.Nickname != nil {
+				n := strings.TrimSpace(*req.Nickname)
+				if n != "" {
+					nickname = &n
+				}
+			}
+			if req.AboutMe != nil {
+				a := strings.TrimSpace(*req.AboutMe)
+				if a != "" {
+					aboutMe = &a
+				}
+			}
+		}
+
+		// keep existing values where not provided
+		if fullName == "" {
+			fullName = user.FullName
+		}
+		if dateOfBirth == "" {
+			dateOfBirth = user.DateOfBirth
+		}
+		if nickname == nil {
+			nickname = user.Nickname
+		}
+		if aboutMe == nil {
+			aboutMe = user.AboutMe
+		}
+		if avatarURL == nil {
+			avatarURL = user.AvatarURL
+		}
+
+		if err := db.UpdateUserProfile(s.DB, user.ID, fullName, dateOfBirth, avatarURL, nickname, aboutMe); err != nil {
+			log.Println("UpdateUserProfile error:", err)
+			writeError(w, http.StatusInternalServerError, "failed to update profile")
+			return
+		}
+
+		updated, err := db.GetUserByID(s.DB, user.ID)
+		if err != nil {
+			log.Println("GetUserByID after update error:", err)
+			writeError(w, http.StatusInternalServerError, "failed to reload user")
+			return
+		}
+		resp := map[string]any{
+			"id":            updated.ID,
+			"uuid":          updated.UUID,
+			"email":         updated.Email,
+			"full_name":     updated.FullName,
+			"date_of_birth": updated.DateOfBirth,
+			"avatar_url":    updated.AvatarURL,
+			"nickname":      updated.Nickname,
+			"about_me":      updated.AboutMe,
+			"is_private":    updated.IsPrivate,
+			"created_at":    updated.CreatedAt,
+		}
+		writeJSON(w, http.StatusOK, resp)
+		return
+
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
 }
 
 // -------------------------
@@ -406,6 +544,13 @@ func (s *Server) handleGetUserProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check if there's a pending follow request from current user to target
+	isPending := false
+	followStatus, err := db.GetFollowStatus(s.DB, int(currentUser.ID), int(targetUser.ID))
+	if err == nil && followStatus != nil && followStatus.Status == "pending" {
+		isPending = true
+	}
+
 	canViewFull := !targetUser.IsPrivate || isFollowing
 
 	followerCount, _ := db.GetFollowerCount(s.DB, int(targetUser.ID))
@@ -429,6 +574,7 @@ func (s *Server) handleGetUserProfile(w http.ResponseWriter, r *http.Request) {
 			"posts": []any{}, // hidden
 			"viewer": map[string]any{
 				"is_following": false,
+				"is_pending":   isPending,
 				"is_self":      false,
 				"can_view":     false,
 			},
@@ -437,12 +583,12 @@ func (s *Server) handleGetUserProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Public profile OR follower => show profile + visible posts (public + almost-private)
-posts, err := db.GetPostsByUserVisibleForViewer(
-    s.DB,
-    int(targetUser.ID),     // whose profile
-    int(currentUser.ID),    // viewer
-    isFollowing,            // includeAlmost
-)
+	posts, err := db.GetPostsByUserVisibleForViewer(
+		s.DB,
+		int(targetUser.ID),  // whose profile
+		int(currentUser.ID), // viewer
+		isFollowing,         // includeAlmost
+	)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to fetch posts")
 		return
@@ -468,6 +614,7 @@ posts, err := db.GetPostsByUserVisibleForViewer(
 		"posts": posts,
 		"viewer": map[string]any{
 			"is_following": isFollowing,
+			"is_pending":   isPending,
 			"is_self":      false,
 			"can_view":     true,
 		},
@@ -649,7 +796,7 @@ func (s *Server) GetMyPosts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-posts, err := db.GetPostsByUserVisibleForViewer(s.DB, int(user.ID), int(user.ID), true)
+	posts, err := db.GetPostsByUserVisibleForViewer(s.DB, int(user.ID), int(user.ID), true)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to fetch posts")
 		return

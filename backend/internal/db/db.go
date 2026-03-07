@@ -5,7 +5,9 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-		_ "github.com/mattn/go-sqlite3"
+	"strings"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
 // opens a sql database at the given path and pings it
@@ -15,11 +17,11 @@ func OpenDb(path string) *sql.DB {
 	if err != nil {
 		log.Fatalf("failed to open db: %v", err)
 	}
-//if db doesnt open 
+	//if db doesnt open
 	if err := database.Ping(); err != nil {
 		log.Fatalf("failed to ping db: %v", err)
 	}
-	// otherwise return db connection 
+	// otherwise return db connection
 	return database
 }
 
@@ -31,9 +33,9 @@ func RunMigrations(db *sql.DB, migrationsDir string) {
 		log.Printf("could not read migrations directory %s: %v", migrationsDir, err)
 		return
 	}
-// loop through each entry 
+	// loop through each entry
 	for _, entry := range entries {
-		//only run sql files not directories incase we add folders in the future 
+		//only run sql files not directories incase we add folders in the future
 		if entry.IsDir() {
 			continue
 		}
@@ -43,9 +45,15 @@ func RunMigrations(db *sql.DB, migrationsDir string) {
 		if err != nil {
 			log.Fatalf("failed to read migration %s: %v", path, err)
 		}
-//execute migration
+		//execute migration
 		log.Printf("running migration %s", entry.Name())
 		if _, err := db.Exec(string(sqlBytes)); err != nil {
+			// sqlite will error if a column already exists when adding one;
+			// migrations should be idempotent so ignore that specific case.
+			if strings.Contains(err.Error(), "duplicate column") {
+				log.Printf("skipping migration %s: %v", entry.Name(), err)
+				continue
+			}
 			log.Fatalf("failed to execute migration %s: %v", path, err)
 		}
 	}

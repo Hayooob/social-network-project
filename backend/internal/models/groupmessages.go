@@ -7,5 +7,6 @@ type GroupMessage struct {
 	SenderID   int    `json:"sender_id"`
 	SenderName string `json:"sender_name"`
 	Content    string `json:"content"`
+	ImagePath  string `json:"image_path,omitempty"`
 	CreatedAt  string `json:"created_at"`
 }

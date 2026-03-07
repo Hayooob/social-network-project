@@ -6,9 +6,9 @@ import (
 )
 
 // SendGroupMessage saves a message to a group chat
-func SendGroupMessage(db *sql.DB, groupID, senderID int, content string) (*models.GroupMessage, error) {
-	stmt := `INSERT INTO group_messages (group_id, sender_id, content) VALUES (?, ?, ?)`
-	result, err := db.Exec(stmt, groupID, senderID, content)
+func SendGroupMessage(db *sql.DB, groupID, senderID int, content string, imagePath string) (*models.GroupMessage, error) {
+	stmt := `INSERT INTO group_messages (group_id, sender_id, content, image_path) VALUES (?, ?, ?, ?)`
+	result, err := db.Exec(stmt, groupID, senderID, content, imagePath)
 	if err != nil {
 		return nil, err
 	}
@@ -24,17 +24,21 @@ func SendGroupMessage(db *sql.DB, groupID, senderID int, content string) (*model
 // GetGroupMessageByID retrieves a single group message by ID
 func GetGroupMessageByID(db *sql.DB, messageID int) (*models.GroupMessage, error) {
 	stmt := `
-		SELECT gm.id, gm.group_id, gm.sender_id, u.full_name, gm.content, gm.created_at
+		SELECT gm.id, gm.group_id, gm.sender_id, u.full_name, gm.content, gm.image_path, gm.created_at
 		FROM group_messages gm
 		JOIN users u ON u.id = gm.sender_id
 		WHERE gm.id = ?
 	`
 	var msg models.GroupMessage
+	var imagePath sql.NullString
 	err := db.QueryRow(stmt, messageID).Scan(
-		&msg.ID, &msg.GroupID, &msg.SenderID, &msg.SenderName, &msg.Content, &msg.CreatedAt,
+		&msg.ID, &msg.GroupID, &msg.SenderID, &msg.SenderName, &msg.Content, &imagePath, &msg.CreatedAt,
 	)
 	if err != nil {
 		return nil, err
+	}
+	if imagePath.Valid {
+		msg.ImagePath = imagePath.String
 	}
 	return &msg, nil
 }
@@ -42,7 +46,7 @@ func GetGroupMessageByID(db *sql.DB, messageID int) (*models.GroupMessage, error
 // GetGroupMessages retrieves messages for a group with pagination
 func GetGroupMessages(db *sql.DB, groupID, limit, offset int) ([]models.GroupMessage, error) {
 	stmt := `
-		SELECT gm.id, gm.group_id, gm.sender_id, u.full_name, gm.content, gm.created_at
+		SELECT gm.id, gm.group_id, gm.sender_id, u.full_name, gm.content, gm.image_path, gm.created_at
 		FROM group_messages gm
 		JOIN users u ON u.id = gm.sender_id
 		WHERE gm.group_id = ?
@@ -58,10 +62,14 @@ func GetGroupMessages(db *sql.DB, groupID, limit, offset int) ([]models.GroupMes
 	var messages []models.GroupMessage
 	for rows.Next() {
 		var msg models.GroupMessage
+		var imagePath sql.NullString
 		if err := rows.Scan(
-			&msg.ID, &msg.GroupID, &msg.SenderID, &msg.SenderName, &msg.Content, &msg.CreatedAt,
+			&msg.ID, &msg.GroupID, &msg.SenderID, &msg.SenderName, &msg.Content, &imagePath, &msg.CreatedAt,
 		); err != nil {
 			return nil, err
+		}
+		if imagePath.Valid {
+			msg.ImagePath = imagePath.String
 		}
 		messages = append(messages, msg)
 	}

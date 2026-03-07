@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+
+// base URL for API resources (images, avatars, etc.)
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8080";
 import { getFeed, createPost, listComments, createComment, toggleLike } from '../api/posts';
 import { getSuggestedUsers } from '../api/auth';
 import { followUser, getFollowCounts, getMyFollowers } from '../api/followers';
@@ -15,15 +18,15 @@ export default function FeedPage() {
   const [loading, setLoading] = useState(true);
   const [content, setContent] = useState('');
   const [posting, setPosting] = useState(false);
-const [openCommentsPostId, setOpenCommentsPostId] = useState(null);
-const [commentsByPostId, setCommentsByPostId] = useState({});
-const [commentDraftByPostId, setCommentDraftByPostId] = useState({});
-const [likesByPostId, setLikesByPostId] = useState({});
-const [imageFile, setImageFile] = useState(null);
-const [privacy, setPrivacy] = useState("public");
-const [followers, setFollowers] = useState([]);
-const [allowedViewers, setAllowedViewers] = useState([]);
-const location = useLocation();
+  const [openCommentsPostId, setOpenCommentsPostId] = useState(null);
+  const [commentsByPostId, setCommentsByPostId] = useState({});
+  const [commentDraftByPostId, setCommentDraftByPostId] = useState({});
+  const [likesByPostId, setLikesByPostId] = useState({});
+  const [imageFile, setImageFile] = useState(null);
+  const [privacy, setPrivacy] = useState("public");
+  const [followers, setFollowers] = useState([]);
+  const [allowedViewers, setAllowedViewers] = useState([]);
+  const location = useLocation();
 
   const fetchData = async () => {
     setLoading(true);
@@ -43,23 +46,23 @@ const location = useLocation();
     }
   };
 
-useEffect(() => { fetchData(); }, [location.key]);
+  useEffect(() => { fetchData(); }, [location.key]);
 
-// Load followers once (used for "private" post audience)
-useEffect(() => {
-  let cancelled = false;
-  (async () => {
-    try {
-      const f = await getMyFollowers();
-      if (!cancelled) setFollowers(f);
-    } catch {
-      // ignore
-    }
-  })();
-  return () => {
-    cancelled = true;
-  };
-}, []);
+  // Load followers once (used for "private" post audience)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const f = await getMyFollowers();
+        if (!cancelled) setFollowers(f);
+      } catch {
+        // ignore
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
 
   const handlePostSubmit = async (e) => {
@@ -73,10 +76,10 @@ useEffect(() => {
 
     setPosting(true);
     try {
-await createPost(content.trim(), privacy, imageFile, allowedViewers);
-setImageFile(null);
-setAllowedViewers([]);
-setPrivacy("public");
+      await createPost(content.trim(), privacy, imageFile, allowedViewers);
+      setImageFile(null);
+      setAllowedViewers([]);
+      setPrivacy("public");
       setContent('');
       fetchData();
     } catch (err) {
@@ -124,49 +127,49 @@ setPrivacy("public");
     const classes = ['post-accent', 'post-accent-rose', 'post-accent-dark'];
     return classes[index % 3];
   };
-const loadComments = async (postId) => {
-  const data = await listComments(postId);
-  setCommentsByPostId((prev) => ({ ...prev, [postId]: data || [] }));
-};
+  const loadComments = async (postId) => {
+    const data = await listComments(postId);
+    setCommentsByPostId((prev) => ({ ...prev, [postId]: data || [] }));
+  };
 
-const onToggleComments = async (postId) => {
-  if (openCommentsPostId === postId) {
-    setOpenCommentsPostId(null);
-    return;
-  }
-  setOpenCommentsPostId(postId);
-  if (!commentsByPostId[postId]) {
-    await loadComments(postId);
-  }
-};
+  const onToggleComments = async (postId) => {
+    if (openCommentsPostId === postId) {
+      setOpenCommentsPostId(null);
+      return;
+    }
+    setOpenCommentsPostId(postId);
+    if (!commentsByPostId[postId]) {
+      await loadComments(postId);
+    }
+  };
 
-const onSubmitComment = async (postId) => {
-  const text = (commentDraftByPostId[postId] || "").trim();
-  if (!text) return;
+  const onSubmitComment = async (postId) => {
+    const text = (commentDraftByPostId[postId] || "").trim();
+    if (!text) return;
 
-  try {
-    await createComment(postId, text);
-    setCommentDraftByPostId((prev) => ({ ...prev, [postId]: "" }));
-    await loadComments(postId);
-  } catch (e) {
-    console.error("createComment error:", e);
-    alert(e.message || "Failed to create comment");
-  }
-};
+    try {
+      await createComment(postId, text);
+      setCommentDraftByPostId((prev) => ({ ...prev, [postId]: "" }));
+      await loadComments(postId);
+    } catch (e) {
+      console.error("createComment error:", e);
+      alert(e.message || "Failed to create comment");
+    }
+  };
 
 
-const onToggleLike = async (postId) => {
-  try {
-    const res = await toggleLike(postId);
-    setLikesByPostId((prev) => ({ ...prev, [postId]: res }));
-    setPosts((prev) =>
-      prev.map((p) => (p.id === postId ? { ...p, like_count: res.like_count } : p))
-    );
-  } catch (e) {
-    console.error("toggleLike error:", e);
-    alert(e.message || "Failed to like");
-  }
-};
+  const onToggleLike = async (postId) => {
+    try {
+      const res = await toggleLike(postId);
+      setLikesByPostId((prev) => ({ ...prev, [postId]: res }));
+      setPosts((prev) =>
+        prev.map((p) => (p.id === postId ? { ...p, like_count: res.like_count } : p))
+      );
+    } catch (e) {
+      console.error("toggleLike error:", e);
+      alert(e.message || "Failed to like");
+    }
+  };
 
   return (
     <div className="main-content">
@@ -175,10 +178,25 @@ const onToggleLike = async (postId) => {
         <aside>
           <div className="card card-shadow-right profile-card">
             <span className="card-star star-spin">✦</span>
-            <div className="avatar">
-              {user ? getInitial(user.full_name) : '?'}
-              <div className="avatar-status"></div>
-            </div>
+            {(() => {
+              const avatarSrc = user?.avatar_url
+                ? (user.avatar_url.startsWith('http') ? user.avatar_url : `${API_BASE}${user.avatar_url}`)
+                : null;
+              return (
+                <div className="avatar">
+                  {avatarSrc ? (
+                    <img
+                      src={avatarSrc}
+                      alt="avatar"
+                      style={{ width: '100%', height: '100%', borderRadius: '50%' }}
+                    />
+                  ) : (
+                    user ? getInitial(user.full_name) : '?'
+                  )}
+                  <div className="avatar-status"></div>
+                </div>
+              );
+            })()}
             <h2 className="profile-name">{user?.full_name || 'Loading...'}</h2>
             <p className="profile-handle">@{user?.email?.split('@')[0] || 'user'}</p>
             <div className="divider"></div>
@@ -279,12 +297,12 @@ const onToggleLike = async (postId) => {
                   </div>
                 )}
                 <input
-  type="file"
-  accept="image/*"
-  disabled={posting}
-  onChange={(e) => setImageFile(e.target.files?.[0] || null)}
-  style={{ marginTop: 12 }}
-/>
+                  type="file"
+                  accept="image/*"
+                  disabled={posting}
+                  onChange={(e) => setImageFile(e.target.files?.[0] || null)}
+                  style={{ marginTop: 12 }}
+                />
 
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
                   <button type="submit" className="btn btn-primary" disabled={posting}>
@@ -319,19 +337,38 @@ const onToggleLike = async (postId) => {
                 <div className="post-content">
                   <div className="post-header">
                     <div className="post-author-info">
-                      <Link 
-                        to={`/users/${post.user_id}`} 
+                      <Link
+                        to={`/users/${post.user_id}`}
                         style={{ textDecoration: 'none', display: 'block' }}
                       >
-                        <div className={`avatar avatar-small ${index % 3 === 1 ? 'bg-rose' : index % 3 === 2 ? 'bg-dark' : 'bg-blue'}`}>
-                          {getInitial(post.author_name)}
-                        </div>
+                        {(() => {
+                          // compute avatar source if available
+                          const avatarSrc = post.author_avatar_url
+                            ? (post.author_avatar_url.startsWith('http')
+                              ? post.author_avatar_url
+                              : `${API_BASE}${post.author_avatar_url}`)
+                            : null;
+                          const colorClass = index % 3 === 1 ? 'bg-rose' : index % 3 === 2 ? 'bg-dark' : 'bg-blue';
+                          return (
+                            <div className={`avatar avatar-small ${!avatarSrc ? colorClass : ''}`}>
+                              {avatarSrc ? (
+                                <img
+                                  src={avatarSrc}
+                                  alt="avatar"
+                                  style={{ width: '100%', height: '100%', borderRadius: '50%' }}
+                                />
+                              ) : (
+                                getInitial(post.author_name)
+                              )}
+                            </div>
+                          );
+                        })()}
                       </Link>
                       <div>
-                        <Link 
-                          to={`/users/${post.user_id}`} 
-                          style={{ 
-                            textDecoration: 'none', 
+                        <Link
+                          to={`/users/${post.user_id}`}
+                          style={{
+                            textDecoration: 'none',
                             color: 'var(--coffee-bean)',
                             fontWeight: 600,
                             fontSize: '14px',
@@ -351,68 +388,68 @@ const onToggleLike = async (postId) => {
                   </div>
                   <p className="post-text">{post.content}</p>
                   {post.image_path && (
-  <div style={{ marginTop: 12 }}>
-    <img
-      src={`http://localhost:8080${post.image_path}`}
-      alt="post"
-      style={{ maxWidth: "100%", borderRadius: 12 }}
-    />
-  </div>
-)}
+                    <div style={{ marginTop: 12 }}>
+                      <img
+                        src={`http://localhost:8080${post.image_path}`}
+                        alt="post"
+                        style={{ maxWidth: "100%", borderRadius: 12 }}
+                      />
+                    </div>
+                  )}
 
-                <div className="post-actions">
-  <button
-    type="button"
-    className="post-action"
-    onClick={() => onToggleLike(post.id)}
-  >
-    ♥ Like {likesByPostId[post.id]?.like_count ?? post.like_count ?? 0}
-  </button>
+                  <div className="post-actions">
+                    <button
+                      type="button"
+                      className="post-action"
+                      onClick={() => onToggleLike(post.id)}
+                    >
+                      ♥ Like {likesByPostId[post.id]?.like_count ?? post.like_count ?? 0}
+                    </button>
 
-  <button
-    type="button"
-    className="post-action"
-    onClick={() => onToggleComments(post.id)}
-  >
-    ↩ Reply {commentsByPostId[post.id]?.length ? `(${commentsByPostId[post.id].length})` : ''}
-  </button>
+                    <button
+                      type="button"
+                      className="post-action"
+                      onClick={() => onToggleComments(post.id)}
+                    >
+                      ↩ Reply {commentsByPostId[post.id]?.length ? `(${commentsByPostId[post.id].length})` : ''}
+                    </button>
 
-  <span className="post-action">⋯</span>
-</div>
+                    <span className="post-action">⋯</span>
+                  </div>
 
-{openCommentsPostId === post.id && (
-  <div style={{ marginTop: 12, borderTop: '1px solid rgba(0,0,0,0.08)', paddingTop: 12 }}>
-    <div style={{ display: 'grid', gap: 10, marginBottom: 10 }}>
-      {(commentsByPostId[post.id] || []).map((c) => (
-        <div key={c.id} style={{ fontSize: 14 }}>
-          <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 2 }}>
-            {c.author_name || c.username || 'Unknown'} •{' '}
-            {c.created_at ? new Date(c.created_at).toLocaleString() : ''}
-          </div>
-          <div>{c.content}</div>
-        </div>
-      ))}
+                  {openCommentsPostId === post.id && (
+                    <div style={{ marginTop: 12, borderTop: '1px solid rgba(0,0,0,0.08)', paddingTop: 12 }}>
+                      <div style={{ display: 'grid', gap: 10, marginBottom: 10 }}>
+                        {(commentsByPostId[post.id] || []).map((c) => (
+                          <div key={c.id} style={{ fontSize: 14 }}>
+                            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 2 }}>
+                              {c.author_name || c.username || 'Unknown'} •{' '}
+                              {c.created_at ? new Date(c.created_at).toLocaleString() : ''}
+                            </div>
+                            <div>{c.content}</div>
+                          </div>
+                        ))}
 
-      {(commentsByPostId[post.id] || []).length === 0 && (
-        <div style={{ fontSize: 13, opacity: 0.6 }}>No comments yet.</div>
-      )}
-    </div>
+                        {(commentsByPostId[post.id] || []).length === 0 && (
+                          <div style={{ fontSize: 13, opacity: 0.6 }}>No comments yet.</div>
+                        )}
+                      </div>
 
-    <div style={{ display: 'flex', gap: 8 }}>
-      <input
-        className="form-input"
-        placeholder="Write a comment…"
-        value={commentDraftByPostId[post.id] || ''}
-        onChange={(e) =>
-          setCommentDraftByPostId((prev) => ({ ...prev, [post.id]: e.target.value }))
-        }
-      />
-      <button className="btn btn-primary" type="button" onClick={() => onSubmitComment(post.id)}>
-        Send ↗
-      </button>
-    </div>
-  </div>
-)}
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <input
+                          className="form-input"
+                          placeholder="Write a comment…"
+                          value={commentDraftByPostId[post.id] || ''}
+                          onChange={(e) =>
+                            setCommentDraftByPostId((prev) => ({ ...prev, [post.id]: e.target.value }))
+                          }
+                        />
+                        <button className="btn btn-primary" type="button" onClick={() => onSubmitComment(post.id)}>
+                          Send ↗
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                 </div>
               </div>
@@ -424,14 +461,14 @@ const onToggleLike = async (postId) => {
         <aside>
           {/* Search Bar */}
           <SearchBar />
-          
+
           {/* Suggested Users */}
           <div className="card card-shadow-left">
             <div style={{ padding: '20px 24px', borderBottom: '1px solid rgba(23, 3, 18, 0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span className="section-title">Suggested</span>
               <span className="text-rose star-float-slow" style={{ fontSize: '12px' }}>✦</span>
             </div>
-            
+
             {suggestions.length === 0 ? (
               <div style={{ padding: '24px', textAlign: 'center' }}>
                 <p style={{ fontSize: '13px', opacity: 0.6, fontFamily: "'Cormorant Garamond', serif" }}>No suggestions yet</p>
@@ -449,7 +486,7 @@ const onToggleLike = async (postId) => {
                       <span className="suggestion-name">{suggestedUser.full_name || 'Unknown'}</span>
                     </Link>
                   </div>
-                  <button 
+                  <button
                     className="btn btn-outline"
                     onClick={() => handleFollow(suggestedUser.id)}
                   >

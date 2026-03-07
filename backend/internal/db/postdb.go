@@ -108,6 +108,7 @@ WHERE p.id = ?
 		&post.Privacy,
 		&post.CreatedAt,
 		&post.AuthorName,
+		&post.AuthorAvatarURL,
 		&post.ImagePath,
 	)
 	if err != nil {
@@ -123,6 +124,7 @@ func GetPublicFeed(db *sql.DB, limit int) ([]models.Post, error) {
 	query := `
 		SELECT p.id, p.user_id, p.content, p.privacy, p.created_at,
        u.full_name as author_name,
+       COALESCE(u.avatar_url, '') AS author_avatar_url,
        COALESCE(pi.image_path, '') AS image_path,
        (SELECT COUNT(1) FROM post_likes pl WHERE pl.post_id = p.id) AS like_count,
        (SELECT COUNT(1) FROM post_comments pc WHERE pc.post_id = p.id) AS comment_count,
@@ -155,6 +157,7 @@ func GetPersonalizedFeed(db *sql.DB, userID int, limit int) ([]models.Post, erro
 		SELECT DISTINCT
 			p.id, p.user_id, p.content, p.privacy, p.created_at,
 			u.full_name AS author_name,
+			COALESCE(u.avatar_url, '') AS author_avatar_url,
 			COALESCE(pi.image_path, '') AS image_path,
 			(SELECT COUNT(1) FROM post_likes pl WHERE pl.post_id = p.id) AS like_count,
 			(SELECT COUNT(1) FROM post_comments pc WHERE pc.post_id = p.id) AS comment_count,
@@ -195,6 +198,9 @@ func GetPostsByUserID(db *sql.DB, userID int) ([]models.Post, error) {
 		SELECT
 			p.id, p.user_id, p.content, p.privacy, p.created_at,
 			u.full_name AS author_name,
+			COALESCE(u.avatar_url, '') AS author_avatar_url,
+			COALESCE(u.avatar_url, '') AS author_avatar_url,
+			COALESCE(u.avatar_url, '') AS author_avatar_url,
 			COALESCE(pi.image_path, '') AS image_path,
 			(SELECT COUNT(1) FROM post_likes pl WHERE pl.post_id = p.id) AS like_count,
 			(SELECT COUNT(1) FROM post_comments pc WHERE pc.post_id = p.id) AS comment_count,
@@ -221,17 +227,18 @@ func scanPosts(rows *sql.Rows) ([]models.Post, error) {
 	for rows.Next() {
 		var post models.Post
 		err := rows.Scan(
-    &post.ID,
-    &post.UserID,
-    &post.Content,
-    &post.Privacy,
-    &post.CreatedAt,
-    &post.AuthorName,
-    &post.ImagePath,
-    &post.LikeCount,
-    &post.CommentCount,
-    &post.LikedByMe,
-)
+			&post.ID,
+			&post.UserID,
+			&post.Content,
+			&post.Privacy,
+			&post.CreatedAt,
+			&post.AuthorName,
+			&post.AuthorAvatarURL,
+			&post.ImagePath,
+			&post.LikeCount,
+			&post.CommentCount,
+			&post.LikedByMe,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -249,7 +256,7 @@ func scanPosts(rows *sql.Rows) ([]models.Post, error) {
 // - If includeAlmost is true, it includes privacy='almost-private' in addition to public.
 // - It never includes privacy='private'. (Use GetPostsByUserVisibleForViewer for private allow-lists.)
 func GetPostsByUserVisible(db *sql.DB, userID int, includeAlmost bool) ([]models.Post, error) {
-query := `
+	query := `
 	SELECT
 		p.id, p.user_id, p.content, p.privacy, p.created_at,
 		u.full_name AS author_name,
@@ -295,7 +302,7 @@ func GetPostsByUserVisibleForViewer(db *sql.DB, userID int, viewerID int, includ
 		flag = 1
 	}
 
-query := `
+	query := `
 	SELECT
 		p.id, p.user_id, p.content, p.privacy, p.created_at,
 		u.full_name AS author_name,
@@ -321,7 +328,7 @@ query := `
 	ORDER BY p.created_at DESC
 `
 
-rows, err := db.Query(query, viewerID, userID, flag, viewerID)
+	rows, err := db.Query(query, viewerID, userID, flag, viewerID)
 	if err != nil {
 		return nil, err
 	}

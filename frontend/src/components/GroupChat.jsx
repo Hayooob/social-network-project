@@ -2,16 +2,19 @@ import React, { useEffect, useState, useRef } from 'react';
 import { getGroupMessages, sendGroupMessage } from '../api/groupmessages';
 import { useWebSocket } from '../WebSocketContext';
 import { useAuth } from '../VerifyAuth';
-import { Send, MessageCircle } from 'lucide-react';
+import { Send, MessageCircle, Image as ImageIcon } from 'lucide-react';
 
 export default function GroupChat({ groupId }) {
   const { user } = useAuth();
   const { lastMessage, isConnected } = useWebSocket();
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   // Fetch messages
   const fetchMessages = async () => {
@@ -45,15 +48,36 @@ export default function GroupChat({ groupId }) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  const handleImageSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedImage(file);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setImagePreview(event.target?.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setSelectedImage(null);
+    setImagePreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   const handleSend = async (e) => {
     e.preventDefault();
-    if (!newMessage.trim()) return;
+    if (!newMessage.trim() && !selectedImage) return;
 
     setSending(true);
     try {
-      const msg = await sendGroupMessage(groupId, newMessage.trim());
+      const msg = await sendGroupMessage(groupId, newMessage.trim(), selectedImage);
       setMessages(prev => [...prev, msg]);
       setNewMessage('');
+      handleRemoveImage();
     } catch (err) {
       console.error('Error sending group message:', err);
       alert('Failed to send message');
@@ -106,8 +130,8 @@ export default function GroupChat({ groupId }) {
           messages.map((msg, index) => {
             const isOwn = msg.sender_id === user?.id;
             return (
-              <div 
-                key={msg.id} 
+              <div
+                key={msg.id}
                 style={{
                   display: 'flex',
                   flexDirection: isOwn ? 'row-reverse' : 'row',
@@ -146,9 +170,24 @@ export default function GroupChat({ groupId }) {
                       {msg.sender_name}
                     </div>
                   )}
-                  <p style={{ margin: 0, fontSize: '14px', lineHeight: 1.4, whiteSpace: 'pre-wrap' }}>
-                    {msg.content}
-                  </p>
+                  {msg.image_path && (
+                    <img
+                      src={msg.image_path}
+                      alt="message attachment"
+                      style={{
+                        maxWidth: '100%',
+                        maxHeight: '250px',
+                        borderRadius: '8px',
+                        marginBottom: msg.content ? '8px' : 0,
+                        display: 'block'
+                      }}
+                    />
+                  )}
+                  {msg.content && (
+                    <p style={{ margin: 0, fontSize: '14px', lineHeight: 1.4, whiteSpace: 'pre-wrap' }}>
+                      {msg.content}
+                    </p>
+                  )}
                   <div style={{ fontSize: '10px', opacity: 0.6, marginTop: '4px', textAlign: 'right' }}>
                     {formatTime(msg.created_at)}
                   </div>
@@ -160,13 +199,72 @@ export default function GroupChat({ groupId }) {
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Image Preview */}
+      {imagePreview && (
+        <div style={{
+          padding: '8px 16px',
+          borderTop: '1px solid rgba(23, 3, 18, 0.1)',
+          backgroundColor: 'rgba(245, 243, 239, 0.3)'
+        }}>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <img
+              src={imagePreview}
+              alt="preview"
+              style={{ height: '50px', width: '50px', objectFit: 'cover', borderRadius: '4px' }}
+            />
+            <span style={{ fontSize: '13px', flex: 1 }}>Image selected</span>
+            <button
+              type="button"
+              onClick={handleRemoveImage}
+              style={{
+                padding: '4px 8px',
+                fontSize: '12px',
+                backgroundColor: '#ef4444',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              Remove
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Message Input */}
       <form onSubmit={handleSend} style={{
         padding: '12px 16px',
         borderTop: '1px solid rgba(23, 3, 18, 0.1)',
         display: 'flex',
-        gap: '10px'
+        gap: '10px',
+        alignItems: 'center'
       }}>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleImageSelect}
+          style={{ display: 'none' }}
+        />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={sending}
+          title="Attach image"
+          style={{
+            padding: '8px',
+            backgroundColor: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            opacity: sending ? 0.5 : 1
+          }}
+        >
+          <ImageIcon size={18} color="var(--dusk-blue)" />
+        </button>
         <input
           type="text"
           className="form-input"
@@ -176,10 +274,10 @@ export default function GroupChat({ groupId }) {
           disabled={sending}
           style={{ flex: 1 }}
         />
-        <button 
-          type="submit" 
+        <button
+          type="submit"
           className="btn btn-primary"
-          disabled={sending || !newMessage.trim()}
+          disabled={sending || (!newMessage.trim() && !selectedImage)}
         >
           <Send size={14} />
         </button>

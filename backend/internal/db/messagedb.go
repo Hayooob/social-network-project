@@ -111,6 +111,7 @@ func GetConversationList(db *sql.DB, userID int) ([]models.Conversation, error) 
 		SELECT 
 			other_user_id,
 			u.full_name,
+			COALESCE(u.avatar_url, '') AS avatar_url,
 			last_message,
 			last_message_at,
 			unread_count
@@ -155,6 +156,7 @@ func GetConversationList(db *sql.DB, userID int) ([]models.Conversation, error) 
 		err := rows.Scan(
 			&c.UserID,
 			&c.UserName,
+			&c.AvatarURL,
 			&c.LastMessage,
 			&c.LastMessageAt,
 			&c.UnreadCount,

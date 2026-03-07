@@ -1,6 +1,8 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8080";
+
 export default function ConversationCard({ conversation }) {
   const getInitial = (name) => {
     return name ? name.charAt(0).toUpperCase() : '?';
@@ -31,8 +33,8 @@ export default function ConversationCard({ conversation }) {
   };
 
   return (
-    <Link 
-      to={`/messages/${conversation.user_id}`} 
+    <Link
+      to={`/messages/${conversation.user_id}`}
       style={{ textDecoration: 'none', color: 'inherit' }}
     >
       <div style={{
@@ -44,48 +46,65 @@ export default function ConversationCard({ conversation }) {
         cursor: 'pointer',
         transition: 'background-color 0.2s ease'
       }}
-      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(45, 81, 149, 0.05)'}
-      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(45, 81, 149, 0.05)'}
+        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
       >
         {/* Avatar */}
-        <div style={{
-          width: '48px',
-          height: '48px',
-          borderRadius: '50%',
-          backgroundColor: 'var(--dusk-blue)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'var(--white)',
-          fontSize: '18px',
-          fontWeight: 600,
-          flexShrink: 0,
-          position: 'relative'
-        }}>
-          {getInitial(conversation.user_name)}
-          
-          {/* Unread indicator dot */}
-          {conversation.unread_count > 0 && (
+        {(() => {
+          const avatarSrc = conversation.avatar_url
+            ? (conversation.avatar_url.startsWith('http')
+              ? conversation.avatar_url
+              : `${API_BASE}${conversation.avatar_url}`)
+            : null;
+          return (
             <div style={{
-              position: 'absolute',
-              bottom: '0',
-              right: '0',
-              width: '14px',
-              height: '14px',
-              backgroundColor: 'var(--blush-rose)',
+              width: '48px',
+              height: '48px',
               borderRadius: '50%',
-              border: '2px solid var(--white)',
+              backgroundColor: avatarSrc ? 'transparent' : 'var(--dusk-blue)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '8px',
               color: 'var(--white)',
-              fontWeight: 700
+              fontSize: '18px',
+              fontWeight: 600,
+              flexShrink: 0,
+              position: 'relative'
             }}>
-              {conversation.unread_count > 9 ? '9+' : conversation.unread_count}
+              {avatarSrc ? (
+                <img
+                  src={avatarSrc}
+                  alt="avatar"
+                  style={{ width: '100%', height: '100%', borderRadius: '50%' }}
+                />
+              ) : (
+                getInitial(conversation.user_name)
+              )}
+
+              {/* Unread indicator dot */}
+              {conversation.unread_count > 0 && (
+                <div style={{
+                  position: 'absolute',
+                  bottom: '0',
+                  right: '0',
+                  width: '14px',
+                  height: '14px',
+                  backgroundColor: 'var(--blush-rose)',
+                  borderRadius: '50%',
+                  border: '2px solid var(--white)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '8px',
+                  color: 'var(--white)',
+                  fontWeight: 700
+                }}>
+                  {conversation.unread_count > 9 ? '9+' : conversation.unread_count}
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          );
+        })()}
 
         {/* Content */}
         <div style={{ flex: 1, minWidth: 0 }}>

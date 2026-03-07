@@ -2,10 +2,14 @@ package app
 
 import (
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"social-network/internal/db"
 	"social-network/internal/models"
@@ -110,20 +114,68 @@ func (s *Server) handleSendGroupMessage(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Parse request body
-	var req struct {
-		Content string `json:"content"`
+	var content string
+	var imagePath string
+
+	ct := r.Header.Get("Content-Type")
+
+	if strings.HasPrefix(ct, "multipart/form-data") {
+		if err := r.ParseMultipartForm(10 << 20); err != nil { // 10MB
+			writeError(w, http.StatusBadRequest, "invalid multipart form")
+			return
+		}
+
+		content = strings.TrimSpace(r.FormValue("content"))
+
+		// image file: field name MUST be "image"
+		file, header, err := r.FormFile("image")
+		if err == nil && file != nil && header != nil {
+			defer file.Close()
+
+			_ = os.MkdirAll("uploads", 0755)
+
+			ext := filepath.Ext(header.Filename)
+			if ext == "" {
+				ext = ".png"
+			}
+
+			filename := strconv.FormatInt(time.Now().UnixNano(), 10) + ext
+			dstPath := filepath.Join("uploads", filename)
+
+			dst, err := os.Create(dstPath)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "failed to save image")
+				return
+			}
+			defer dst.Close()
+
+			if _, err := io.Copy(dst, file); err != nil {
+				writeError(w, http.StatusInternalServerError, "failed to save image")
+				return
+			}
+
+			imagePath = "/uploads/" + filename
+		}
+	} else {
+		var req struct {
+			Content   string `json:"content"`
+			ImagePath string `json:"image_path,omitempty"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+		content = strings.TrimSpace(req.Content)
+		imagePath = req.ImagePath
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
-		return
-	}
-	if req.Content == "" {
+
+	if content == "" {
 		writeError(w, http.StatusBadRequest, "content cannot be empty")
 		return
 	}
 
 	// Save message
-	msg, err := db.SendGroupMessage(s.DB, groupID, int(user.ID), req.Content)
+	msg, err := db.SendGroupMessage(s.DB, groupID, int(user.ID), content, imagePath)
 	if err != nil {
 		log.Println("SendGroupMessage error:", err)
 		writeError(w, http.StatusInternalServerError, "failed to send message")

@@ -206,7 +206,21 @@ func GetPendingFollowRequests(db *sql.DB, userID int) ([]models.Follow, error) {
 
 	return follows, nil
 }
+func IsFollowPending(db *sql.DB, followerID, followingID int) (bool, error) {
+	stmt := `
+		SELECT EXISTS(
+			SELECT 1
+			FROM followers
+			WHERE follower_id = ?
+			AND following_id = ?
+			AND status = 'pending'
+		)
+	`
 
+	var exists bool
+	err := db.QueryRow(stmt, followerID, followingID).Scan(&exists)
+	return exists, err
+}
 func GetFollowerCount(db *sql.DB, userID int) (int, error) {
 	stmt := `
 		SELECT COUNT(*)
