@@ -171,11 +171,6 @@ export default function MessagesPage() {
     f.nickname?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Friends who don't have existing conversations
-  const newChatFriends = filteredFriends.filter(f =>
-    !conversations.some(c => c.user_id === f.id)
-  );
-
   return (
     <div className="main-content">
       <div style={{

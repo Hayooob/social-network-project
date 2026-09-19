@@ -1,10 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../VerifyAuth';
 import { getPendingRequests, acceptFollowRequest, declineFollowRequest } from '../api/followers';
 
 export default function FollowRequestsPage() {
-  const { user } = useAuth();
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(null);

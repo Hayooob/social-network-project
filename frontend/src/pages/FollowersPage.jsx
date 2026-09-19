@@ -1,10 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../VerifyAuth';
 import { getMyFollowers, getMyFollowing, unfollowUser } from '../api/followers';
 
 export default function FollowersPage() {
-  const { user } = useAuth();
   const [followers, setFollowers] = useState([]);
   const [following, setFollowing] = useState([]);
   const [loading, setLoading] = useState(true);
