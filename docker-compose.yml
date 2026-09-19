@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   backend:
     build:
@@ -12,7 +10,13 @@ services:
       - ./backend/uploads:/app/uploads
       - sqlite-data:/app/data
     environment:
+      # Read by cmd/main.go; keeps the database on the named volume above so it
+      # survives `docker compose down`.
       - DB_PATH=/app/data/social.db
+      - PORT=8080
+      # The app is served by nginx on port 80 in this setup, so that is the
+      # origin the browser sends for API calls and the WebSocket handshake.
+      - ALLOWED_ORIGINS=http://localhost,http://127.0.0.1
     restart: unless-stopped
 
   frontend:

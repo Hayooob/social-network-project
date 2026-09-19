@@ -4,7 +4,36 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 )
+
+// allowedOrigins is the set of browser origins permitted to call the API with
+// credentials and to open a WebSocket. It defaults to the Vite dev server and
+// can be overridden with ALLOWED_ORIGINS (comma separated) for other
+// deployments — under docker-compose, for example, the app is served from
+// http://localhost, not http://localhost:5173.
+var allowedOrigins = loadAllowedOrigins()
+
+func loadAllowedOrigins() map[string]bool {
+	raw := os.Getenv("ALLOWED_ORIGINS")
+	if raw == "" {
+		raw = "http://localhost:5173,http://127.0.0.1:5173"
+	}
+
+	origins := make(map[string]bool)
+	for _, o := range strings.Split(raw, ",") {
+		if o = strings.TrimSpace(o); o != "" {
+			origins[o] = true
+		}
+	}
+	return origins
+}
+
+// isAllowedOrigin reports whether origin may talk to this API.
+func isAllowedOrigin(origin string) bool {
+	return origin != "" && allowedOrigins[origin]
+}
 
 type Server struct {
 	DB *sql.DB
@@ -63,7 +92,6 @@ func NewServer(db *sql.DB) *Server {
 	mux.HandleFunc("/api/check-mutual", s.handleCheckMutual)
 	mux.Handle("/uploads/", http.StripPrefix("/uploads/", http.FileServer(http.Dir("uploads"))))
 
-	
 	// Stage 7: Groups
 	mux.HandleFunc("/api/groups", s.handleGroups)
 	mux.HandleFunc("/api/groups/invitations", s.handleGroupInvitations)
@@ -88,8 +116,9 @@ func (s *Server) CORSMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
 
-		// Only allow your frontend origin during dev
-		if origin == "http://localhost:5173" {
+		// Only reflect origins that are explicitly allowed; never echo back an
+		// arbitrary Origin, which would hand any site credentialed access.
+		if isAllowedOrigin(origin) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
@@ -108,4 +137,3 @@ func (s *Server) CORSMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
-
