@@ -125,6 +125,24 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if receiverID == int(user.ID) {
+		writeError(w, http.StatusBadRequest, "cannot message yourself")
+		return
+	}
+
+	// The UI only offers a chat box for mutual follows, but that check lives in
+	// the browser; without repeating it here any account can message any other.
+	canMessage, err := db.CanMessage(s.DB, int(user.ID), receiverID)
+	if err != nil {
+		log.Println("CanMessage error:", err)
+		writeError(w, http.StatusInternalServerError, "failed to check messaging permission")
+		return
+	}
+	if !canMessage {
+		writeError(w, http.StatusForbidden, "you can only message people you follow each other with, or who have a public profile you follow")
+		return
+	}
+
 	msg, err := db.SendMessage(s.DB, int(user.ID), receiverID, req.Content)
 	if err != nil {
 		log.Println("SendMessage error:", err)

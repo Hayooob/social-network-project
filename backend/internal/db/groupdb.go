@@ -254,6 +254,7 @@ func getGroupMember(db *sql.DB, groupID int, userID int) (*models.GroupMember, e
 	}
 	return &m, nil
 }
+
 // GetVisibleGroups returns groups visible to the user:
 // - groups created by users they follow (accepted follows)
 // - groups they created
@@ -314,6 +315,7 @@ func GetVisibleGroups(dbConn *sql.DB, userID int) ([]models.Group, error) {
 	}
 	return groups, rows.Err()
 }
+
 // GetAcceptedGroupMemberIDs returns user IDs of accepted members.
 func GetAcceptedGroupMemberIDs(dbConn *sql.DB, groupID int) ([]int, error) {
 	rows, err := dbConn.Query(`

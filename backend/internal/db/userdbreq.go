@@ -30,7 +30,7 @@ func CreateUser(db *sql.DB, u *models.User) error {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
 
-	_, err := db.Exec(stmt,
+	res, err := db.Exec(stmt,
 		u.UUID,
 		u.Email,
 		u.PasswordHash,
@@ -41,7 +41,27 @@ func CreateUser(db *sql.DB, u *models.User) error {
 		u.AboutMe,
 		boolToInt(u.IsPrivate),
 	)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Fill in the fields the database generated, so callers (and the register
+	// response) see the real ID and creation time instead of zero values.
+	id, err := res.LastInsertId()
+	if err != nil {
+		return err
+	}
+	u.ID = id
+
+	created, err := GetUserByID(db, id)
+	if err != nil {
+		return err
+	}
+	if created != nil {
+		u.CreatedAt = created.CreatedAt
+	}
+
+	return nil
 }
 
 // GetUserByEmail returns a user by email, or (nil, nil) if not found.

@@ -2,9 +2,9 @@ package app
 
 import "golang.org/x/crypto/bcrypt"
 
-// hash a plain text password using bcrypt 
+// hash a plain text password using bcrypt
 func HashPassword(plain string) (string, error) {
-	// bcrypt.DefaultCost is a good default 
+	// bcrypt.DefaultCost is a good default
 	hash, err := bcrypt.GenerateFromPassword([]byte(plain), bcrypt.DefaultCost)
 	if err != nil {
 		return "", err

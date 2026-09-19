@@ -69,7 +69,8 @@ func GetConversation(db *sql.DB, userID int, otherUserID int, limit int, offset 
 		JOIN users r ON m.receiver_id = r.id
 		WHERE (m.sender_id = ? AND m.receiver_id = ?)
 		   OR (m.sender_id = ? AND m.receiver_id = ?)
-		ORDER BY m.created_at ASC
+		-- id tie-breaks messages created within the same second
+		ORDER BY m.created_at ASC, m.id ASC
 		LIMIT ? OFFSET ?
 	`
 
@@ -128,18 +129,21 @@ func GetConversationList(db *sql.DB, userID int) ([]models.Conversation, error) 
 				 AND m2.receiver_id = ?
 				 AND m2.is_read = 0) as unread_count,
 				ROW_NUMBER() OVER (
-					PARTITION BY CASE 
-						WHEN sender_id = ? THEN receiver_id 
-						ELSE sender_id 
-					END 
-					ORDER BY created_at DESC
+					PARTITION BY CASE
+						WHEN sender_id = ? THEN receiver_id
+						ELSE sender_id
+					END
+					-- created_at only has second resolution, so messages sent
+					-- in the same second tie; id breaks the tie in insert order
+					-- and keeps the preview on the genuinely newest message.
+					ORDER BY created_at DESC, id DESC
 				) as rn
 			FROM messages
 			WHERE sender_id = ? OR receiver_id = ?
 		) sub
 		JOIN users u ON sub.other_user_id = u.id
 		WHERE rn = 1
-		ORDER BY last_message_at DESC
+		ORDER BY last_message_at DESC, other_user_id ASC
 	`
 
 	rows, err := db.Query(stmt, userID, userID, userID, userID, userID, userID)
@@ -192,4 +196,41 @@ func GetUnreadMessageCount(db *sql.DB, userID int) (int, error) {
 	var count int
 	err := db.QueryRow(stmt, userID).Scan(&count)
 	return count, err
+}
+
+// CanMessage reports whether senderID is allowed to start or continue a private
+// conversation with receiverID.
+//
+// The rule mirrors what the UI offers: you may message someone you are mutual
+// follows with, or someone with a public profile that you follow. Without this
+// check on the server the restriction exists only in the browser.
+func CanMessage(db *sql.DB, senderID int, receiverID int) (bool, error) {
+	if senderID == receiverID {
+		return false, nil
+	}
+
+	mutual, err := AreMutualFriends(db, senderID, receiverID)
+	if err != nil {
+		return false, err
+	}
+	if mutual {
+		return true, nil
+	}
+
+	const query = `
+		SELECT EXISTS (
+			SELECT 1
+			FROM users u
+			JOIN followers f
+			  ON f.following_id = u.id
+			 AND f.follower_id = ?
+			 AND f.status = 'accepted'
+			WHERE u.id = ?
+			  AND u.is_private = 0
+		)
+	`
+
+	var allowed bool
+	err = db.QueryRow(query, senderID, receiverID).Scan(&allowed)
+	return allowed, err
 }
