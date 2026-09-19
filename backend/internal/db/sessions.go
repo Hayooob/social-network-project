@@ -33,7 +33,7 @@ func GetSession(db *sql.DB, token string) (*Session, error) {
 	if err := row.Scan(&s.Token, &s.UserID, &s.ExpiresAt, &s.CreatedAt); err != nil {
 		if err == sql.ErrNoRows {
 			// no session found
-			return nil, nil 
+			return nil, nil
 		}
 		return nil, err
 	}

@@ -19,7 +19,7 @@ type createEventRequest struct {
 }
 
 //type respondEventRequest struct {
-	//Response string `json:"response"`
+//Response string `json:"response"`
 //}
 
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {

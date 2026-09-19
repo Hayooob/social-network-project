@@ -38,7 +38,7 @@ func GetGroupPostByID(db *sql.DB, postID int) (*models.GroupPost, error) {
 }
 
 func GetGroupPosts(db *sql.DB, groupID int, limit int) ([]models.GroupPost, error) {
-    query := `
+	query := `
         SELECT gp.id, gp.group_id, gp.user_id, gp.content, gp.created_at,
             u.full_name AS author_name,
             COUNT(c.id) AS comment_count
@@ -50,21 +50,21 @@ func GetGroupPosts(db *sql.DB, groupID int, limit int) ([]models.GroupPost, erro
         ORDER BY gp.created_at DESC
         LIMIT ?
     `
-    rows, err := db.Query(query, groupID, limit)
-    if err != nil {
-        return nil, err
-    }
-    defer rows.Close()
+	rows, err := db.Query(query, groupID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
 
-    var posts []models.GroupPost
-    for rows.Next() {
-        var p models.GroupPost
-        if err := rows.Scan(&p.ID, &p.GroupID, &p.UserID, &p.Content, &p.CreatedAt, &p.AuthorName, &p.CommentCount); err != nil {
-            return nil, err
-        }
-        posts = append(posts, p)
-    }
-    return posts, rows.Err()
+	var posts []models.GroupPost
+	for rows.Next() {
+		var p models.GroupPost
+		if err := rows.Scan(&p.ID, &p.GroupID, &p.UserID, &p.Content, &p.CreatedAt, &p.AuthorName, &p.CommentCount); err != nil {
+			return nil, err
+		}
+		posts = append(posts, p)
+	}
+	return posts, rows.Err()
 }
 func DeleteGroupPost(db *sql.DB, postID int) error {
 	_, err := db.Exec(`DELETE FROM group_posts WHERE id = ?`, postID)

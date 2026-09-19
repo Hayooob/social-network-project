@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"social-network/internal/models" 
+	"social-network/internal/models"
 )
 
 type contextKey string
@@ -38,7 +38,7 @@ func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// CurrentUser returns the User from context, or nil 
+// CurrentUser returns the User from context, or nil
 func CurrentUser(ctx context.Context) *models.User {
 	val := ctx.Value(userContextKey)
 	if val == nil {

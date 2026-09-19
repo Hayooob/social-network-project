@@ -231,6 +231,7 @@ func GetUserEvents(db *sql.DB, userID int, limit int) ([]models.Event, error) {
 	}
 	return events, rows.Err()
 }
+
 // GetGroupEvents lists events for a group (member only).
 func GetGroupEvents(dbConn *sql.DB, groupID int, viewerID int, limit int) ([]models.Event, error) {
 	query := `
