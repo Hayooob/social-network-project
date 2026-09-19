@@ -314,6 +314,20 @@ func (s *Server) handleGroupRoutes(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 				return
 			}
+
+			// Posts, events, messages and invites all require membership; the
+			// member list has to as well, or a private group's roster is
+			// readable by anyone with an account.
+			isMember, err := db.IsGroupMember(s.DB, groupID, uid)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "could not check membership")
+				return
+			}
+			if !isMember {
+				writeError(w, http.StatusForbidden, "not a group member")
+				return
+			}
+
 			members, err := db.GetGroupMembers(s.DB, groupID)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, "could not get members")

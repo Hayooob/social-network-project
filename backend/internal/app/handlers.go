@@ -26,6 +26,25 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
 }
 
+// allowedImageExts are the only file extensions accepted for avatar and post
+// uploads. Uploads are served from /uploads/ on the same origin as the app, so
+// anything scriptable (.html, .svg) would be a stored XSS vector.
+var allowedImageExts = map[string]bool{
+	".jpg":  true,
+	".jpeg": true,
+	".png":  true,
+	".gif":  true,
+}
+
+// allowedPostPrivacy are the visibility values a post may be created with.
+// Anything else would produce a post the visibility queries never match, which
+// silently hides it from everyone including its author.
+var allowedPostPrivacy = map[string]bool{
+	"public":         true,
+	"almost-private": true,
+	"private":        true,
+}
+
 // -------------------------
 // AUTH: register / login / logout / me
 // -------------------------
@@ -595,17 +614,18 @@ func (s *Server) handleGetUserProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
+		// Someone else's profile: no email or date_of_birth. Both are personal
+		// details the UI never renders for other users, and exposing them here
+		// would let any account harvest them for every user on the instance.
 		"user": map[string]any{
-			"id":            targetUser.ID,
-			"uuid":          targetUser.UUID,
-			"email":         targetUser.Email,
-			"full_name":     targetUser.FullName,
-			"date_of_birth": targetUser.DateOfBirth,
-			"avatar_url":    targetUser.AvatarURL,
-			"nickname":      targetUser.Nickname,
-			"about_me":      targetUser.AboutMe,
-			"is_private":    targetUser.IsPrivate,
-			"created_at":    targetUser.CreatedAt,
+			"id":         targetUser.ID,
+			"uuid":       targetUser.UUID,
+			"full_name":  targetUser.FullName,
+			"avatar_url": targetUser.AvatarURL,
+			"nickname":   targetUser.Nickname,
+			"about_me":   targetUser.AboutMe,
+			"is_private": targetUser.IsPrivate,
+			"created_at": targetUser.CreatedAt,
 		},
 		"counts": map[string]any{
 			"followers": followerCount,
@@ -677,9 +697,13 @@ func (s *Server) CreatePost(w http.ResponseWriter, r *http.Request) {
 
 			_ = os.MkdirAll("uploads", 0755)
 
-			ext := filepath.Ext(header.Filename)
-			if ext == "" {
-				ext = ".png"
+			// Uploads are served back from /uploads/ on this same origin, so an
+			// unchecked extension (.html, .svg) would be stored XSS. Only allow
+			// the image types the UI can display.
+			ext := strings.ToLower(filepath.Ext(header.Filename))
+			if !allowedImageExts[ext] {
+				writeError(w, http.StatusBadRequest, "image must be JPG, PNG, or GIF")
+				return
 			}
 
 			filename := strconv.FormatInt(time.Now().UnixNano(), 10) + ext
@@ -723,6 +747,11 @@ func (s *Server) CreatePost(w http.ResponseWriter, r *http.Request) {
 
 	if content == "" {
 		writeError(w, http.StatusBadRequest, "content is required")
+		return
+	}
+
+	if !allowedPostPrivacy[privacy] {
+		writeError(w, http.StatusBadRequest, "privacy must be public, almost-private, or private")
 		return
 	}
 
@@ -827,12 +856,14 @@ func (s *Server) GetSuggestedUsers(w http.ResponseWriter, r *http.Request) {
 
 	var suggestions []map[string]any
 	for _, u := range users {
+		// Deliberately no email or date_of_birth: these are other people's
+		// accounts and the UI does not display either field.
 		suggestions = append(suggestions, map[string]any{
 			"id":         u.ID,
 			"uuid":       u.UUID,
 			"full_name":  u.FullName,
-			"email":      u.Email,
 			"nickname":   u.Nickname,
+			"avatar_url": u.AvatarURL,
 			"is_private": u.IsPrivate,
 		})
 	}
@@ -919,6 +950,23 @@ type commentResponse struct {
 	CreatedAt  string `json:"created_at"`
 }
 
+// ensureCanViewPost writes an error response and returns false when viewerID is
+// not allowed to see postID. A post that does not exist is reported as 404 so
+// that post IDs cannot be probed for existence.
+func (s *Server) ensureCanViewPost(w http.ResponseWriter, postID int, viewerID int) bool {
+	allowed, err := db.CanViewPost(s.DB, postID, viewerID)
+	if err != nil {
+		log.Println("CanViewPost error:", err)
+		writeError(w, http.StatusInternalServerError, "failed to check post visibility")
+		return false
+	}
+	if !allowed {
+		writeError(w, http.StatusNotFound, "post not found")
+		return false
+	}
+	return true
+}
+
 func (s *Server) handlePostRoutes(w http.ResponseWriter, r *http.Request) {
 	// /api/posts/{id}/comments
 	// /api/posts/{id}/like
@@ -954,6 +1002,12 @@ func (s *Server) handlePostComments(w http.ResponseWriter, r *http.Request, post
 	user := CurrentUser(r.Context())
 	if user == nil {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	// The feed filters posts by privacy, but this endpoint is reachable with any
+	// post ID, so it has to repeat the check or it becomes a way around it.
+	if !s.ensureCanViewPost(w, postID, int(user.ID)) {
 		return
 	}
 
@@ -1045,6 +1099,10 @@ func (s *Server) handlePostLike(w http.ResponseWriter, r *http.Request, postID i
 	user := CurrentUser(r.Context())
 	if user == nil {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	if !s.ensureCanViewPost(w, postID, int(user.ID)) {
 		return
 	}
 

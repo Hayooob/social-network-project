@@ -18,17 +18,28 @@ var upgrader = websocket.Upgrader{
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
 		origin := r.Header.Get("Origin")
-		log.Printf("WebSocket CheckOrigin: %s", origin)
-		return origin == "http://localhost:5173"
+
+		// Same-origin requests (the nginx reverse proxy in docker-compose)
+		// arrive with the Host as their Origin, so accept those too; anything
+		// else has to be in ALLOWED_ORIGINS.
+		if origin == "http://"+r.Host || origin == "https://"+r.Host {
+			return true
+		}
+
+		if !isAllowedOrigin(origin) {
+			log.Printf("WebSocket rejected origin: %q", origin)
+			return false
+		}
+		return true
 	},
 }
 
 type Client struct {
-	UserID       int64
-	UserName     string
-	Conn         *websocket.Conn
-	Send         chan []byte
-	CurrentPage  string // Track which page the user is on
+	UserID        int64
+	UserName      string
+	Conn          *websocket.Conn
+	Send          chan []byte
+	CurrentPage   string // Track which page the user is on
 	ChatPartnerID int64  // If on messages page, track who they're chatting with
 }
 
@@ -104,7 +115,7 @@ func (h *Hub) broadcastOnlineUsers() {
 	}
 
 	data, _ := json.Marshal(msg)
-	
+
 	// Send directly to clients instead of using Broadcast channel to avoid deadlock
 	h.mu.RLock()
 	for _, client := range h.Clients {
@@ -145,7 +156,7 @@ func (h *Hub) IsUserOnline(userID int64) bool {
 func (h *Hub) IsUserViewingChatWith(userID int64, chatPartnerID int64) bool {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	
+
 	if client, ok := h.Clients[userID]; ok {
 		return client.CurrentPage == "messages" && client.ChatPartnerID == chatPartnerID
 	}
@@ -156,7 +167,7 @@ func (h *Hub) IsUserViewingChatWith(userID int64, chatPartnerID int64) bool {
 func (h *Hub) UpdateClientPage(userID int64, page string, chatPartnerID int64) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	
+
 	if client, ok := h.Clients[userID]; ok {
 		client.CurrentPage = page
 		client.ChatPartnerID = chatPartnerID
@@ -169,21 +180,21 @@ type WSMessage struct {
 	To            int64  `json:"to,omitempty"`
 	Content       string `json:"content,omitempty"`
 	MessageID     int    `json:"message_id,omitempty"`
-	Page          string `json:"page,omitempty"`           // For page_status messages
+	Page          string `json:"page,omitempty"`            // For page_status messages
 	ChatPartnerID int64  `json:"chat_partner_id,omitempty"` // Who user is chatting with
 }
 
 func (s *Server) HandleWebSocket(hub *Hub) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Println("WebSocket connection attempt...")
-		
+
 		user := CurrentUser(r.Context())
 		if user == nil {
 			log.Println("WebSocket: No user in context - unauthorized")
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
-		
+
 		log.Printf("WebSocket: User %s (ID: %d) attempting to connect", user.FullName, user.ID)
 
 		conn, err := upgrader.Upgrade(w, r, nil)
@@ -191,7 +202,7 @@ func (s *Server) HandleWebSocket(hub *Hub) http.HandlerFunc {
 			log.Println("WebSocket upgrade error:", err)
 			return
 		}
-		
+
 		log.Printf("WebSocket: Connection upgraded for user %s", user.FullName)
 
 		client := &Client{
@@ -317,9 +328,23 @@ func handlePageStatus(client *Client, hub *Hub, wsMsg WSMessage) {
 
 func handleChatMessage(sender *Client, hub *Hub, database *sql.DB, wsMsg WSMessage) {
 	log.Printf("handleChatMessage: from=%d, to=%d, content=%s", sender.UserID, wsMsg.To, wsMsg.Content)
-	
+
 	if wsMsg.To == 0 || wsMsg.Content == "" {
 		log.Println("handleChatMessage: Missing 'to' or 'content'")
+		return
+	}
+
+	// Most messages arrive over this socket rather than the REST endpoint, so
+	// the same permission rule has to be applied here or the check is trivially
+	// bypassed by talking to the WebSocket directly.
+	allowed, err := db.CanMessage(database, int(sender.UserID), int(wsMsg.To))
+	if err != nil {
+		log.Println("handleChatMessage: CanMessage error:", err)
+		return
+	}
+	if !allowed {
+		log.Printf("handleChatMessage: user %d not allowed to message %d", sender.UserID, wsMsg.To)
+		sendWSError(sender, "you cannot message this user")
 		return
 	}
 
@@ -352,7 +377,7 @@ func handleChatMessage(sender *Client, hub *Hub, database *sql.DB, wsMsg WSMessa
 	// 1. Receiver is offline, OR
 	// 2. Receiver is online but NOT viewing chat with sender
 	shouldNotify := !hub.IsUserOnline(wsMsg.To) || !hub.IsUserViewingChatWith(wsMsg.To, sender.UserID)
-	
+
 	if shouldNotify {
 		log.Printf("Creating notification for user %d (offline or not viewing chat)", wsMsg.To)
 		fromUserID := int(sender.UserID)
@@ -360,7 +385,7 @@ func handleChatMessage(sender *Client, hub *Hub, database *sql.DB, wsMsg WSMessa
 	} else {
 		log.Printf("User %d is viewing chat with sender, skipping notification", wsMsg.To)
 	}
-	
+
 	log.Println("handleChatMessage completed")
 }
 
@@ -387,5 +412,24 @@ func handleMarkRead(client *Client, database *sql.DB, wsMsg WSMessage) {
 	err := db.MarkMessagesAsRead(database, int(client.UserID), int(wsMsg.To))
 	if err != nil {
 		log.Println("Failed to mark messages as read:", err)
+	}
+}
+
+// sendWSError delivers a non-fatal error back to a single client without
+// dropping the connection.
+func sendWSError(c *Client, message string) {
+	payload, err := json.Marshal(map[string]any{
+		"type":  "error",
+		"error": message,
+	})
+	if err != nil {
+		return
+	}
+
+	select {
+	case c.Send <- payload:
+	default:
+		// Client's buffer is full; dropping the notice is preferable to
+		// blocking the hub.
 	}
 }

@@ -12,8 +12,15 @@ import (
 
 // opens a sql database at the given path and pings it
 func OpenDb(path string) *sql.DB {
+	// SQLite ignores FOREIGN KEY clauses unless foreign_keys is turned on, and
+	// the pragma is per connection, so it goes in the DSN where the driver
+	// applies it to every connection the pool opens. Without it the ON DELETE
+	// CASCADE rules in the migrations are inert and orphaned likes, comments
+	// and memberships accumulate.
+	dsn := path + "?_foreign_keys=on&_busy_timeout=5000"
+
 	//will open .db file in the req path
-	database, err := sql.Open("sqlite3", path)
+	database, err := sql.Open("sqlite3", dsn)
 	if err != nil {
 		log.Fatalf("failed to open db: %v", err)
 	}
@@ -21,6 +28,7 @@ func OpenDb(path string) *sql.DB {
 	if err := database.Ping(); err != nil {
 		log.Fatalf("failed to ping db: %v", err)
 	}
+
 	// otherwise return db connection
 	return database
 }
