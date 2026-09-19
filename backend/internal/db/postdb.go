@@ -92,12 +92,13 @@ func InsertPostWithExtras(db *sql.DB, userID int, content, privacy string, image
 func GetPostByID(db *sql.DB, postID int) (*models.Post, error) {
 	query := `
 		SELECT p.id, p.user_id, p.content, p.privacy, p.created_at,
-       u.full_name as author_name,
-       COALESCE(pi.image_path, '') as image_path
-FROM posts p
-JOIN users u ON p.user_id = u.id
-LEFT JOIN post_images pi ON pi.post_id = p.id
-WHERE p.id = ?
+		       u.full_name AS author_name,
+		       COALESCE(u.avatar_url, '') AS author_avatar_url,
+		       COALESCE(pi.image_path, '') AS image_path
+		FROM posts p
+		JOIN users u ON p.user_id = u.id
+		LEFT JOIN post_images pi ON pi.post_id = p.id
+		WHERE p.id = ?
 	`
 
 	var post models.Post
@@ -199,8 +200,6 @@ func GetPostsByUserID(db *sql.DB, userID int) ([]models.Post, error) {
 			p.id, p.user_id, p.content, p.privacy, p.created_at,
 			u.full_name AS author_name,
 			COALESCE(u.avatar_url, '') AS author_avatar_url,
-			COALESCE(u.avatar_url, '') AS author_avatar_url,
-			COALESCE(u.avatar_url, '') AS author_avatar_url,
 			COALESCE(pi.image_path, '') AS image_path,
 			(SELECT COUNT(1) FROM post_likes pl WHERE pl.post_id = p.id) AS like_count,
 			(SELECT COUNT(1) FROM post_comments pc WHERE pc.post_id = p.id) AS comment_count,
@@ -260,6 +259,7 @@ func GetPostsByUserVisible(db *sql.DB, userID int, includeAlmost bool) ([]models
 	SELECT
 		p.id, p.user_id, p.content, p.privacy, p.created_at,
 		u.full_name AS author_name,
+		COALESCE(u.avatar_url, '') AS author_avatar_url,
 		COALESCE(pi.image_path, '') AS image_path,
 		(SELECT COUNT(1) FROM post_likes pl WHERE pl.post_id = p.id) AS like_count,
 		(SELECT COUNT(1) FROM post_comments pc WHERE pc.post_id = p.id) AS comment_count,
@@ -306,6 +306,7 @@ func GetPostsByUserVisibleForViewer(db *sql.DB, userID int, viewerID int, includ
 	SELECT
 		p.id, p.user_id, p.content, p.privacy, p.created_at,
 		u.full_name AS author_name,
+		COALESCE(u.avatar_url, '') AS author_avatar_url,
 		COALESCE(pi.image_path, '') AS image_path,
 		(SELECT COUNT(1) FROM post_likes pl WHERE pl.post_id = p.id) AS like_count,
 		(SELECT COUNT(1) FROM post_comments pc WHERE pc.post_id = p.id) AS comment_count,
@@ -335,4 +336,43 @@ func GetPostsByUserVisibleForViewer(db *sql.DB, userID int, viewerID int, includ
 	defer rows.Close()
 
 	return scanPosts(rows)
+}
+
+// CanViewPost reports whether viewerID is allowed to see postID.
+//
+// It mirrors the visibility rules used by GetPersonalizedFeed so that
+// per-post endpoints (comments, likes) cannot be used to reach around the
+// feed's filtering. A post that does not exist is never viewable.
+//
+// A viewer may see a post when any of the following holds:
+//   - they are the author;
+//   - the post is public and the author's profile is public;
+//   - they are an accepted follower and the post is public or almost-private;
+//   - the post is private and they are named in post_allowed_viewers.
+func CanViewPost(db *sql.DB, postID int, viewerID int) (bool, error) {
+	const query = `
+		SELECT EXISTS (
+			SELECT 1
+			FROM posts p
+			JOIN users u ON u.id = p.user_id
+			LEFT JOIN followers f
+			       ON f.follower_id = ?
+			      AND f.following_id = p.user_id
+			      AND f.status = 'accepted'
+			WHERE p.id = ?
+			  AND (
+			        p.user_id = ?
+			     OR (p.privacy = 'public' AND u.is_private = 0)
+			     OR (f.id IS NOT NULL AND p.privacy IN ('public', 'almost-private'))
+			     OR (p.privacy = 'private' AND EXISTS (
+			            SELECT 1 FROM post_allowed_viewers pav
+			            WHERE pav.post_id = p.id AND pav.user_id = ?
+			        ))
+			  )
+		)
+	`
+
+	var allowed bool
+	err := db.QueryRow(query, viewerID, postID, viewerID, viewerID).Scan(&allowed)
+	return allowed, err
 }
